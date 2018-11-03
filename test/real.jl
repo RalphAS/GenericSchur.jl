@@ -128,7 +128,7 @@ for T in [Float64, Float32]
         # On author's dev system, tests pass with tol=5 for most and 6 for all,
         # but generalization is risky.
         # (LAPACK uses 20, FWIW.)
-        tols = fill(10,itypemax)
+        tols = fill(20,itypemax)
 
         simrconds = [1.0, rtulpi, 0.0]
         magns = [1.0, ovfl*ulp, unfl*ulpinv]
