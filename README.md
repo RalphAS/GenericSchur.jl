@@ -58,11 +58,12 @@ A::StridedMatrix{R} where {R <: Real} == Z * T * transpose(Z)
 where `T` is quasi-upper-triangular and `Z` is orthogonal, both with the
 same element type as `A`.  This is what you get by invoking the above-mentioned
 functions with matrix arguments whose element type `T <: Real`.
-If the optional keyword `standardized` is set to `false`,
-the result is not quite in standard form, in that some
+By default, the result is not quite in standard form, in that some
 pair-blocks (and therefore rank-2 invariant subspaces) are not fully resolved.
-There are a few cases where this is needed for a correct decomposition
-(a problem under study).
+
+If the optional keyword `standardized` is set to `true` in `gschur`, a
+standard form is produced.  There are currently a few cases where this
+does not give a correct decomposition (a problem under study).
 
 Eigenvectors are not currently available for the "real Schur" forms.
 

@@ -1,4 +1,8 @@
-# @info "Suppressing 2x2 block checks pending standardization logic."
+const _standard = Ref(false)
+
+if !_standard[]
+    @info "Suppressing 2x2 block checks pending standardization fixes."
+end
 
 # this requires that tiny values have been cleaned out
 function checkblocks(A::StridedMatrix; debug=false)
@@ -22,13 +26,15 @@ function checkblocks(A::StridedMatrix; debug=false)
     isok
 end
 
-function schurtest(A::Matrix{T}, tol; normal=false, standard=true, baddec=false,
+function schurtest(A::Matrix{T}, tol; normal=false, standard=_standard[],
+                   baddec=false,
                    ) where {T<:Real}
     n = size(A,1)
     ulp = eps(T)
     if T <: BlasFloat
-        S = GenericSchur.gschur(A)
+        S = GenericSchur.gschur(A, standardize=standard)
     else
+        # FIXME: no keywords allowed here; thanks, LinearAlgebra
         S = schur(A)
     end
     # test 1: S.T is upper quasi-triangular
@@ -48,12 +54,13 @@ function schurtest(A::Matrix{T}, tol; normal=false, standard=true, baddec=false,
     # test 4: S.values are e.v. of T
     # I thought this would be robust enough (hey, IWFM),
     # but Travis runs on hardware that says otherwise.
-    if false # T <: BlasFloat
+    if false # (T <: BlasFloat) && !standard
         vLA = csort(eigvals(S.T))
         vGS = csort(S.values)
         rte = sqrt(eps(T))
         @test isapprox(vGS, vLA, atol=rte, rtol=rte)
     end
+    # TODO: in standard case test 4 should be part of checkblocks
 
     # It is tempting to check eigenvalues against LAPACK eigvals(A)
     # for suitable types, but the comparison is misleading without
@@ -61,9 +68,10 @@ function schurtest(A::Matrix{T}, tol; normal=false, standard=true, baddec=false,
     # non-normal.
 
     if normal
-        # verify that Schur diagonalizes normal matrices
+        # verify that Schur "diagonalizes" normal matrices
         # necessary but not really sufficient (complex blocks)
         @test norm(triu(S.T,2)) / (n * norm(A) * ulp) < tol
+        # TODO: in this case comparison to LAPACK is legit
     end
 end
 
@@ -242,7 +250,8 @@ for T in [Float64, Float32]
                     (verbosity[] > 1) &&
                         println("latmr: n=$n $anorm, $imode, $rcond")
                     latmr!(A,anorm,imode,rcond)
-                    schurtest(A,tols[itype],baddec=((imode==6) && (j==3) && (n==32)))
+                    schurtest(A,tols[itype],
+                              baddec=(_standard[] && (imode==6) && (j==3) && (n==32)))
                 end
             end
         end
