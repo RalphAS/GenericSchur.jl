@@ -1,10 +1,12 @@
-const _standard = Ref(false)
+# This is the value of standardize used for the vast majority of tests:
+const _standard = Ref(true)
 
 if !_standard[]
     @info "Suppressing 2x2 block checks pending standardization fixes."
 end
 
-# this requires that tiny values have been cleaned out
+# Check that 2x2 diagonal blocks have standard form.
+# This requires that tiny values have been cleaned out.
 function checkblocks(A::StridedMatrix; debug=false)
     n = size(A,1)
     isok = true
@@ -26,12 +28,43 @@ function checkblocks(A::StridedMatrix; debug=false)
     isok
 end
 
+# This only applies to standard forms w/ co-sorted eigenvals
+function checkeigvals(A::StridedMatrix{T}, w::StridedVector, tol; debug=false
+                      ) where T <: Real
+    n = size(A,1)
+    ulp = eps(T)
+    tiny = GenericSchur.safemin(T)
+    isok = true
+    for j=1:n
+        isok &= (A[j,j] == real(w[j]))
+    end
+    if n>1
+        if A[2,1] == 0
+            isok &= (imag(w[1]) == 0)
+        end
+        if A[n,n-1] == 0
+            isok &= (imag(w[n]) == 0)
+        end
+    end
+    for j=1:n-1
+        if A[j+1,j] != 0
+            t = sqrt(abs(A[j+1,j]))*sqrt(abs(A[j,j+1]))
+            cmp = max(ulp*t,tiny)
+            isok &= (abs(imag(w[j]) - t) / cmp < tol)
+            isok &= (abs(imag(w[j+1]) + t) / cmp < tol)
+        elseif (j>1) && (A[j+1,j] == 0) && (A[j,j-1] == 0)
+            isok &= (imag(w[j]) == 0)
+        end
+    end
+    isok
+end
+
 function schurtest(A::Matrix{T}, tol; normal=false, standard=_standard[],
                    baddec=false,
                    ) where {T<:Real}
     n = size(A,1)
     ulp = eps(T)
-    if T <: BlasFloat
+    if T <: BlasFloat || (standard != GenericSchur._STANDARDIZE_DEFAULT)
         S = GenericSchur.gschur(A, standardize=standard)
     else
         # FIXME: no keywords allowed here; thanks, LinearAlgebra
@@ -52,15 +85,9 @@ function schurtest(A::Matrix{T}, tol; normal=false, standard=_standard[],
     # test 3: S.Z is orthogonal: norm(I - S.Z * S.Z') / (n * ulp) < tol
     @test norm(I - S.Z * S.Z') / (n * ulp) < tol
     # test 4: S.values are e.v. of T
-    # I thought this would be robust enough (hey, IWFM),
-    # but Travis runs on hardware that says otherwise.
-    if false # (T <: BlasFloat) && !standard
-        vLA = csort(eigvals(S.T))
-        vGS = csort(S.values)
-        rte = sqrt(eps(T))
-        @test isapprox(vGS, vLA, atol=rte, rtol=rte)
+    if standard
+        @test checkeigvals(S.T, S.values, tol)
     end
-    # TODO: in standard case test 4 should be part of checkblocks
 
     # It is tempting to check eigenvalues against LAPACK eigvals(A)
     # for suitable types, but the comparison is misleading without
@@ -250,8 +277,9 @@ for T in [Float64, Float32]
                     (verbosity[] > 1) &&
                         println("latmr: n=$n $anorm, $imode, $rcond")
                     latmr!(A,anorm,imode,rcond)
-                    schurtest(A,tols[itype],
-                              baddec=(_standard[] && (imode==6) && (j==3) && (n==32)))
+                    schurtest(A,tols[itype])
+                    # throw this in for coverage
+                    schurtest(A,tols[itype],standard=!_standard[])
                 end
             end
         end

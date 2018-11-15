@@ -256,16 +256,23 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
     return HH
 end
 
+const _STANDARDIZE_DEFAULT = true
+
 function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
                   tol = eps(real(T)), debug = false, shiftmethod = :Francis,
-                  maxiter = 100*size(H, 1), standardize = false,
+                  maxiter = 100*size(H, 1), standardize = _STANDARDIZE_DEFAULT,
                   kwargs...) where {T <: Real}
     n = size(H, 1)
     istart = 1
     iend = n
     HH = H.data
     τ = Rotation(Givens{T}[])
-    w = Complex{T}[]
+    w = Vector{Complex{T}}(undef, n)
+    iwcur = n
+    function putw!(w,z)
+        w[iwcur] = z
+        iwcur -= 1
+    end
 
     # iteration count
     i = 0
@@ -302,7 +309,7 @@ function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
         # if block size is one we deflate
         if istart >= iend
             debug && @printf("Bottom deflation! Block size is one. New iend is %6d\n", iend - 1)
-            standardize && push!(w,HH[iend,iend])
+            standardize && putw!(w,HH[iend,iend])
             iend -= 1
 
         # and the same for a 2x2 block
@@ -313,8 +320,8 @@ function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
                 debug && println("std. iend = $iend")
                 H2 = HH[iend-1:iend,iend-1:iend]
                 G2,w1,w2 = _gs2x2!(H2,iend)
-                push!(w,w1)
-                push!(w,w2)
+                putw!(w,w2)
+                putw!(w,w1)
                 lmul!(G2,view(HH,:,istart:n))
                 rmul!(view(HH,1:iend,:),G2')
                 HH[iend-1:iend,iend-1:iend] .= H2 # clean
@@ -388,15 +395,16 @@ function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
         if iend <= 2
             if standardize
                 if iend == 1
-                    push!(w,HH[iend,iend])
+                    putw!(w,HH[iend,iend])
                 elseif iend == 2
-                    H2 = HH[iend-1:iend,iend-1:iend]
-                    G2,w1,w2 = _gs2x2!(H2,iend)
-                    push!(w,w1)
-                    push!(w,w2)
+                    debug && println("final std. iend = $iend")
+                    H2 = HH[1:2,1:2]
+                    G2,w1,w2 = _gs2x2!(H2,2)
+                    putw!(w,w2)
+                    putw!(w,w1)
                     lmul!(G2,HH)
                     rmul!(view(HH,1:2,:),G2')
-                    HH[iend-1:iend,iend-1:iend] .= H2 # clean
+                    HH[1:2,1:2] .= H2 # clean
                     Z === nothing || rmul!(Z,G2')
                 end
             end
@@ -479,6 +487,7 @@ function _gs2x2!(H2::StridedMatrix{T},jj) where {T <: Real}
                         τ = one(T) / sqrt(abs(b+c))
                         a = midad + p
                         d = midad - p
+                        b -= c
                         c = 0
                         cs1 = sab*τ
                         sn1 = sac*τ
