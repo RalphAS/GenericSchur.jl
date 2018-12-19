@@ -28,6 +28,7 @@ function _scale!(A::AbstractArray{T}) where {T}
     scaleA, cscale, anrm
 end
 
+abs1(z) = abs(z)
 abs1(z::T) where {T <: Complex} = abs(real(z))+abs(imag(z))
 
 # translated from xLASCL (LAPACK)
@@ -257,6 +258,146 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
                 end
             end
         end
+    end
+    if tscale != one(RT)
+        @inbounds for i=1:n; cnorm[i] *= one(RT)/tscale; end
+    end
+    xscale
+end
+
+# conjugate transpose version
+function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
+
+    cabs2(z) = abs(real(z)/2) + abs(imag(z)/2)
+
+    RT = real(T)
+    half = one(RT) / 2
+#    smallnum = safemin(RT) / (2*eps(RT)) # WARNING: assumes base 2
+    smallnum = safemin(RT) / eps(RT)
+    bignum = one(RT)/ smallnum
+    xscale = one(RT)
+
+    tmax = abs(cnorm[1])
+    @inbounds for j=2:n
+        tmax = max(tmax, abs(cnorm[j]))
+    end
+
+    if tmax <= bignum * half
+        tscale = one(RT)
+    else
+        tscale = one(RT) / (smallnum * tmax)
+        cnorm .*= tscale
+    end
+    # bound on solution vector:
+    xmax = cabs2(x[1])
+    @inbounds for j=2:n
+        xmax = max(xmax,cabs2(x[j]))
+    end
+    xbound = xmax
+    if tscale != one(RT)
+        grow = zero(RT)
+    else
+        # compute grow
+        grow = half / max(xbound, smallnum)
+        xbound = grow
+        for j=1:n
+            # give up if too small
+            (grow <= smallnum) && break
+            # G[j] = max(G[j-1], M[j-1]*(1+cnorm[j]))
+            xj = one(RT) + cnorm[j]
+            grow = min(grow, xbound / xj)
+            tjjs = A[j,j]
+            tjj = abs1(tjjs)
+            if tjj >= smallnum
+                if xj > tjj
+                    xbound *= (tjj / xj)
+                end
+            else
+                # M[j] could overflow
+                xbound = zero(RT)
+            end
+        end
+        grow = min(grow, xbound)
+    end
+
+    if grow * tscale > smallnum
+        # bound is ok; use standard arithmetic
+        @inbounds for j in 1:n
+            z = x[j]
+            for i in 1:j-1
+                z -= conj(A[i,j]) * x[i]
+            end
+            x[j] = conj(A[j,j]) \ z
+        end
+    else
+        for j=1:n
+            # compute x[j] = b[j] - Σ_(k≠j) A[k,j] x[k]
+            xj = abs1(x[j])
+            uscale = complex(tscale)
+            rec = one(RT) / max(xmax, one(RT))
+            if cnorm[j] > (bignum - xj) * rec
+                # if x[j] could overflow scale x by 1/(2 xmax)
+                rec *= half
+                tjjs = conj(A[j,j]) * tscale
+                tjj = abs1(tjjs)
+                if tjj > one(RT)
+                    # divide by A[j,j] when scaling if A[j,j] > 1
+                    rec = min(one(RT), rec*tjj)
+                    uscale = uscale / tjjs
+                end
+                if rec < one(RT)
+                    @inbounds for i=1:n; x[i] *= rec; end
+                    xscale *= rec
+                    xmax *= rec
+                end
+            end
+            csumj = zero(T)
+            @inbounds for i=1:j-1
+                csumj += (conj(A[i,j]) * uscale) * x[i]
+            end
+            if uscale == complex(tscale)
+                # if diagonal wasn't used to scale
+                # compute x[j] = (x[j] - csumj) / A[j,j]
+                x[j] -= csumj
+                xj = abs1(x[j])
+                tjjs = conj(A[j,j]) * tscale
+
+                # compute x[j] /= A[j,j], scaling if necessary
+                tjj = abs1(tjjs)
+                if tjj > smallnum
+                    if tjj < one(RT)
+                        if xj > tjj * bignum
+                            rec = one(RT) / xj
+                            @inbounds for i=1:n; x[i] *= rec; end
+                            xscale *= rec
+                            xmax *= rec
+                        end
+                    end
+                    x[j] = x[j] / tjjs
+                elseif tjj > zero(RT)
+                    # tiny diag
+                    if xj > tjj * bignum
+                        rec = (tjj * bignum) / xj
+                        @inbounds for i=1:n; x[i] *= rec; end
+                        xscale *= rec
+                        xmax *= rec
+                    end
+                    x[j] = x[j] / tjjs
+                else
+                    # zero diag: compute a null vector of Aᴴ
+                    x .= zero(T)
+                    x[j] = one(T)
+                    xscale = zero(RT)
+                    xmax = zero(RT)
+                end
+            else
+                # if dot product was already divided by A[j,j]
+                # compute x[j] = x[j] / A[j,j] - csumj
+                x[j] = x[j] / tjjs - csumj
+            end
+            xmax = max(xmax, abs1(x[j]))
+        end
+        xscale /= tscale
     end
     if tscale != one(RT)
         @inbounds for i=1:n; cnorm[i] *= one(RT)/tscale; end

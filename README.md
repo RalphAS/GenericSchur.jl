@@ -39,11 +39,13 @@ but not permutation (which would reduce the work).
 
 ### Eigenvectors
 
-Right eigenvectors are available from complex Schur factorizations, using
+Right and left eigenvectors are available from complex Schur factorizations,
+using
 
 ```julia
 S = schur(A)
-V = eigvecs(S)
+VR = eigvecs(S)
+VL = eigvecs(S,left=true)
 ```
 The results are currently unreliable if the Frobenius norm of `A` is very
 small or very large, so scale if necessary.
@@ -70,5 +72,5 @@ Eigenvectors are not currently available for the "real Schur" forms.
 ## Acknowledgements
 
 This package incorporates or elaborates several methods from Andreas Noack's
-[GenericLinearAlgebra.jl](http://github.com/AndreasNoack/GenericLinearAlgebra.jl) package,
+[GenericLinearAlgebra.jl](http://github.com/JuliaLinearAlgebra/GenericLinearAlgebra.jl) package,
 and includes translations from [LAPACK](http://www.netlib.org/lapack/index.html) code.

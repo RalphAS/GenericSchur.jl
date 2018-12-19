@@ -30,23 +30,24 @@ function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
     fom = norm(A) / (floatmin(real(T))/eps(real(T)))
     FOM = norm(A) / (floatmax(real(T))*eps(real(T)))
     if (fom > 25) && (FOM < 0.04)
-        VR = eigvecs(S)
-        @test norm(A * VR - VR * diagm(0 => S.values)) / (n * norm(A) * ulp) < tol
+        As = A
+        Ss = S
+        vtol = tol
     else
-        vtol = (T == Complex{Float16} ? 100 : 20)
+        vtol = (T == Complex{Float16} ? 200 : 20)
         # test work-arounds
         if fom <= 25
             As = A * (floatmax(real(T))*eps(real(T)))
-            S = GenericSchur.gschur(As)
-            VR = eigvecs(S)
-            @test norm(As * VR - VR * diagm(0 => S.values)) / (n * norm(As) * ulp) < vtol
+            Ss = GenericSchur.gschur(As)
         elseif FOM >= 0.04
             As =  A * (floatmin(real(T))/eps(real(T)))
-            S = GenericSchur.gschur(As)
-            VR = eigvecs(S)
-            @test norm(As * VR - VR * diagm(0 => S.values)) / (n * norm(As) * ulp) < vtol
+            Ss = GenericSchur.gschur(As)
         end
     end
+    VR = eigvecs(Ss)
+    @test norm(As * VR - VR * diagm(0 => Ss.values)) / (n * norm(As) * ulp) < vtol
+    VL = eigvecs(Ss, left=true)
+    @test norm(As' * VL - VL * diagm(0 => conj.(Ss.values))) / (n * norm(As) * ulp) < vtol
 end
 
 
