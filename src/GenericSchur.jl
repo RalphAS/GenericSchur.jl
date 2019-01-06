@@ -7,6 +7,7 @@ import LinearAlgebra: lmul!, mul!, checksquare
 # This is the public interface of the package.
 # Wrappers like `schur` and `eigvals` should just work.
 import LinearAlgebra: schur!, eigvals!, eigvecs
+export triangularize
 
 schur!(A::StridedMatrix{T}; kwargs...) where {T} = gschur!(A; kwargs...)
 
@@ -659,5 +660,6 @@ function _geigvals!(HH::StridedMatrix{T}; tol = eps(T)) where {T <: Real}
 end
 
 include("vectors.jl")
+include("triang.jl")
 
 end # module

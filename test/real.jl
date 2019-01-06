@@ -98,8 +98,22 @@ function schurtest(A::Matrix{T}, tol; normal=false, standard=_standard[],
         # verify that Schur "diagonalizes" normal matrices
         # necessary but not really sufficient (complex blocks)
         @test norm(triu(S.T,2)) / (n * norm(A) * ulp) < tol
-        # TODO: in this case comparison to LAPACK is legit
+        # TODO: in this case comparison to LAPACK eigenvalues is legit
     end
+
+    if standard
+        Sc = triangularize(S)
+
+        # test 1: S.T is upper triangular
+        @test all(tril(Sc.T,-1) .== 0)
+        # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
+        @test norm(A - Sc.Z * Sc.T * Sc.Z') / (n * norm(A) * ulp) < tol
+        # test 3: S.Z is unitary: norm(I - S.Z * S.Z') / (n * ulp) < tol
+        @test norm(I - Sc.Z * Sc.Z') / (n * ulp) < tol
+        # test 4: S.values are e.v. of T
+        @test all(csort(Sc.values) .== csort(diag(Sc.T)))
+    end
+
 end
 
 # random orthogonal matrix
