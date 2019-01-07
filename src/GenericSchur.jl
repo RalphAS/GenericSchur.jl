@@ -7,7 +7,7 @@ import LinearAlgebra: lmul!, mul!, checksquare
 # This is the public interface of the package.
 # Wrappers like `schur` and `eigvals` should just work.
 import LinearAlgebra: schur!, eigvals!, eigvecs
-export triangularize
+export triangularize, eigvalscond, subspacesep
 
 schur!(A::StridedMatrix{T}; kwargs...) where {T} = gschur!(A; kwargs...)
 
@@ -661,5 +661,9 @@ end
 
 include("vectors.jl")
 include("triang.jl")
+
+include("norm1est.jl")
+include("sylvester.jl")
+include("ordschur.jl")
 
 end # module
