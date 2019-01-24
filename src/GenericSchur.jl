@@ -6,7 +6,7 @@ import LinearAlgebra: lmul!, mul!, checksquare
 
 # This is the public interface of the package.
 # Wrappers like `schur` and `eigvals` should just work.
-import LinearAlgebra: schur!, eigvals!, eigvecs
+import LinearAlgebra: schur!, eigvals!, eigvecs, eigen!
 export triangularize, eigvalscond, subspacesep
 
 schur!(A::StridedMatrix{T}; kwargs...) where {T} = gschur!(A; kwargs...)
@@ -29,6 +29,30 @@ function eigvecs(S::Schur{T}; left::Bool=false) where {T <: Complex}
         v = _geigvecs!(S.T,S.Z)
     end
     v
+end
+
+function eigen!(A::StridedMatrix{T}; permute=true, scale=true) where {T <: Real}
+    if permute
+        throw(ArgumentError("permute=true is not available for generic Schur"))
+    end
+    if !scale
+        @warn "scaling is always on for generic Schur"
+    end
+    S = triangularize(schur(A))
+    v = eigvecs(S)
+    LinearAlgebra.Eigen(S.values,v)
+end
+
+function eigen!(A::StridedMatrix{T}; permute=true, scale=true) where {T <: Complex}
+    if permute
+        throw(ArgumentError("permute=true is not available for generic Schur"))
+    end
+    if !scale
+        @warn "scaling is always on for generic Schur"
+    end
+    S = schur(A)
+    v = eigvecs(S)
+    LinearAlgebra.Eigen(S.values,v)
 end
 
 ############################################################################
