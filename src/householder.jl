@@ -1,8 +1,12 @@
-# copied from Andreas Noack's GenericLinearAlgebra.jl
+# copied from Andreas Noack's GenericLinearAlgebra.jl, with trivial mods
 
 import Base: *, eltype, size
 import LinearAlgebra: adjoint, mul!, rmul!
 
+"""
+a Householder reflection represented as the essential part of the
+vector and the normalizing factor
+"""
 struct Householder{T,S<:StridedVector}
     v::S
     τ::T
@@ -12,8 +16,9 @@ struct HouseholderBlock{T,S<:StridedMatrix,U<:StridedMatrix}
     T::UpperTriangular{T,U}
 end
 
-size(H::Householder) = (length(H.v), length(H.v))
-size(H::Householder, i::Integer) = i <= 2 ? length(H.v) : 1
+# warning; size -> length(v) in GLA, but this makes more sense to us:
+size(H::Householder) = (length(H.v)+1, length(H.v)+1)
+size(H::Householder, i::Integer) = i <= 2 ? length(H.v)+1 : 1
 
 eltype(H::Householder{T})      where T = T
 eltype(H::HouseholderBlock{T}) where T = T
@@ -23,7 +28,7 @@ adjoint(H::HouseholderBlock{T}) where {T} = Adjoint{T,typeof(H)}(H)
 
 function lmul!(H::Householder, A::StridedMatrix)
     m, n = size(A)
-    length(H.v) == m - 1 || throw(DimensionMismatch(""))
+    size(H,1) == m || throw(DimensionMismatch(""))
     v = view(H.v, 1:m - 1)
     τ = H.τ
     for j = 1:n
@@ -39,7 +44,7 @@ end
 
 function rmul!(A::StridedMatrix, H::Householder)
     m, n = size(A)
-    length(H.v) == n - 1 || throw(DimensionMismatch(""))
+    size(H,1) == n || throw(DimensionMismatch(""))
     v = view(H.v, :)
     τ = H.τ
     a1 = view(A, :, 1)
@@ -54,7 +59,7 @@ end
 function lmul!(adjH::Adjoint{<:Any,<:Householder}, A::StridedMatrix)
     H = parent(adjH)
     m, n = size(A)
-    length(H.v) == m - 1 || throw(DimensionMismatch(""))
+    size(H,1) == m || throw(DimensionMismatch("A: $m,$n H: $(size(H))"))
     v = view(H.v, 1:m - 1)
     τ = H.τ
     for j = 1:n
@@ -144,5 +149,5 @@ end
 (*)(adjH::Adjoint{T,<:HouseholderBlock{T}}, A::StridedMatrix{T}) where {T} =
         lmul!(adjH, copy(A), similar(A, (min(size(parent(adjH).V)...), size(A, 2))))
 
-convert(::Type{Matrix}, H::Householder{T}) where {T} = lmul!(H, Matrix{T}(I, size(H, 1), size(H, 1)))
-convert(::Type{Matrix{T}}, H::Householder{T}) where {T} = lmul!(H, Matrix{T}(I, size(H, 1), size(H, 1)))
+Base.convert(::Type{Matrix}, H::Householder{T}) where {T} = lmul!(H, Matrix{T}(I, size(H, 1), size(H, 1)))
+Base.convert(::Type{Matrix{T}}, H::Householder{T}) where {T} = lmul!(H, Matrix{T}(I, size(H, 1), size(H, 1)))
