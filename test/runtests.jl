@@ -31,9 +31,11 @@ function godunov(T)
     A,vals
 end
 
+include("balance.jl")
 include("real.jl")
 include("complex.jl")
 
 include("ordschur.jl")
+
 
 end # module
