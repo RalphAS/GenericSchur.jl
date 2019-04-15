@@ -11,17 +11,21 @@
 
 ## Schur decomposition for matrices of generic element types in Julia
 
+The Schur decomposition is the workhorse for eigensystem analysis of
+dense non-symmetric matrices.
+
 This package provides a full Schur decomposition of complex square matrices:
 ```julia
 A::StridedMatrix{C} where {C <: Complex} == Z * T * adjoint(Z)
 ```
 where `T` is upper-triangular and `Z` is unitary, both with the same element
-type as `A`.
+type as `A`. (See below for real matrices.)
 
-The principal application is to generic number types such as `Complex{BigFloat}`.
-For these, the `schur!` and `eigvals!` functions in the `LinearAlgebra`
-standard library are overloaded, and may be accessed through the usual
-`schur` and `eigvals` wrappers:
+The principal application is to number types not handled by LAPACK,
+such as `Complex{BigFloat}, Complex{Float128}` (from Quadmath.jl), etc.
+For these, the `schur!`, `eigvals!`, and `eigen!` functions in the `LinearAlgebra`
+standard library are overloaded here, and may be accessed through the usual
+`schur`, `eigvals`, and `eigen` wrappers:
 
 ```julia
 A = your_matrix_generator() + 0im # in case you start with a real matrix
@@ -70,6 +74,22 @@ non-standard (but less expensive) form is produced.
 Eigenvectors are not currently available for the "real Schur" forms.
 But don't despair; one can convert a standard quasi-triangular real `Schur`
 into a complex `Schur` with the `triangularize` function provided here.
+
+## Balancing
+
+The accuracy of eigenvalues and eigenvectors may be improved for some
+matrices by use of a similarity transform which reduces the matrix
+norm.  This is done by default in the `eigen!` method, and may also be
+handled explicitly via the `balance!` function provided here:
+```julia
+Ab, B = balance!(copy(A))
+S = schur(Ab)
+v = eigvecs(S)
+lmul!(B, v) # to get the eigenvectors of A
+```
+More details are in the function docstring. Although the balancing function
+also does permutations to isolate trivial subspaces, the Schur routines do not
+yet exploit this opportunity for reduced workload.
 
 ## Acknowledgements
 
