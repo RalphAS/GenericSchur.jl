@@ -1,6 +1,6 @@
 name = "GenericSchur"
 uuid = "c145ed77-6b09-5dd9-b285-bf645a82121e"
-version = "0.2.1"
+version = "0.2.2-DEV"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

@@ -1,6 +1,11 @@
 # Compute right eigenvectors of a complex upper triangular matrix TT.
 # If Z is nontrivial, multiply by it to get eigenvectors of Z*TT*Z'.
 # based on LAPACK::ztrevc
+# Copyright:
+# Univ. of Tennessee
+# Univ. of California Berkeley
+# Univ. of Colorado Denver
+# NAG Ltd.
 function _geigvecs!(TT::StridedMatrix{T},
                     Z::StridedMatrix{T}=Matrix{T}(undef,0,0)
                     ) where {T <: Complex}
@@ -76,6 +81,11 @@ function _geigvecs!(TT::StridedMatrix{T},
 end
 
 # based on LAPACK::ztrevc
+# Copyright:
+# Univ. of Tennessee
+# Univ. of California Berkeley
+# Univ. of Colorado Denver
+# NAG Ltd.
 function _gleigvecs!(TT::StridedMatrix{T},
                     Z::StridedMatrix{T}=Matrix{T}(undef,0,0)
                     ) where {T <: Complex}

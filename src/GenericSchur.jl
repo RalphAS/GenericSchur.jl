@@ -80,6 +80,14 @@ include("hessenberg.jl")
 include("householder.jl")
 include("balance.jl")
 
+# Largely based on code in GenericLinearAlgebra
+#
+# portions translated from LAPACK::zlahqr
+# LAPACK Copyright:
+# Univ. of Tennessee
+# Univ. of California Berkeley
+# Univ. of Colorado Denver
+# NAG Ltd.
 function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
                  debug = false,
                  maxiter = 100*size(H, 1), maxinner = 30*size(H, 1), kwargs...
@@ -311,6 +319,7 @@ end
 
 const _STANDARDIZE_DEFAULT = true
 
+# Mostly copied from GenericLinearAlgebra
 function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
                   tol = eps(real(T)), debug = false, shiftmethod = :Francis,
                   maxiter = 100*size(H, 1), standardize = _STANDARDIZE_DEFAULT,
@@ -477,6 +486,11 @@ end
 # compute Schur decomposition of real 2x2 in standard form
 # return corresponding Givens and eigenvalues
 # Translated from LAPACK::dlanv2
+# Copyright:
+# Univ. of Tennessee
+# Univ. of California Berkeley
+# Univ. of Colorado Denver
+# NAG Ltd.
 function _gs2x2!(H2::StridedMatrix{T},jj) where {T <: Real}
     a,b,c,d = H2[1,1], H2[1,2], H2[2,1], H2[2,2]
     sgn(x) = (x < 0) ? -one(T) : one(T) # fortran sign differs from Julia

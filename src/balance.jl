@@ -1,3 +1,5 @@
+# This file is part of GenericSchur.jl, released under the MIT "Expat" license
+
 struct Balancer{T}
     ilo :: Int
     ihi :: Int
@@ -8,6 +10,11 @@ struct Balancer{T}
 end
 
 # intended to be a translation of xGEBAL from LAPACK
+# Copyright:
+# Univ. of Tennessee
+# Univ. of California Berkeley
+# Univ. of Colorado Denver
+# NAG Ltd.
 # w/ some allowance for scheme from R.James et al. 2014 arxiv 1401.5766
 """
     balance!(A; scale=true, permute=true) => Abal, B::Balancer
