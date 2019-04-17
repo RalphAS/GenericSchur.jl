@@ -66,7 +66,7 @@ end
 # NAG Ltd.
 
 """
-    eigvalscond(S::Schur,nsub::Integer)
+    eigvalscond(S::Schur,nsub::Integer) => Real
 
 Estimate the reciprocal of the condition number of the `nsub` leading
 eigenvalues of `S`. (Use `ordschur` to move a subspace of interest
@@ -88,7 +88,7 @@ function eigvalscond(S::Schur{Ty},nsub) where Ty
 end
 
 """
-    subspacesep(S::Schur,nsub::Integer)
+    subspacesep(S::Schur,nsub::Integer) => Real
 
 Estimate the reciprocal condition of the separation angle for the
 invariant subspace corresponding

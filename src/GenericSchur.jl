@@ -18,9 +18,10 @@ end
 
 # This is probably the best we can do unless LinearAlgebra coöperates
 """
-    eigvecs(S::Schur{<:Complex}; left=false)
+    eigvecs(S::Schur{<:Complex}; left=false) => Matrix
 
 Compute right or left eigenvectors from a Schur decomposition.
+Eigenvectors are returned as columns of a matrix.
 """
 function eigvecs(S::Schur{T}; left::Bool=false) where {T <: Complex}
     if left
