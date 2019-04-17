@@ -213,12 +213,8 @@ gschur!(A::StridedMatrix) -> F::Schur
 Destructive version of `gschur` (q.v.).
 """
 function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
-                 permute::Bool=false, kwargs...) where T <: Complex
+                 kwargs...) where T <: Complex
     n = checksquare(A)
-    # FIXME: some LinearAlgebra wrappers force default permute=true
-    # so we must silently ignore it here.
-#    permute &&
-#        throw(ArgumentError("permute option is not available for this method"))
     if scale
         scaleA, cscale, anrm = _scale!(A)
     else
@@ -581,10 +577,8 @@ function _gs2x2!(H2::StridedMatrix{T},jj) where {T <: Real}
 end
 
 function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
-                 permute::Bool=false, kwargs...) where {T <: Real}
+                 kwargs...) where {T <: Real}
     n = checksquare(A)
-    # permute &&
-    #    throw(ArgumentError("permute option is not available for this method"))
     if scale
         scaleA, cscale, anrm = _scale!(A)
     else
