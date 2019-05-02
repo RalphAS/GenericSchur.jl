@@ -716,4 +716,6 @@ include("norm1est.jl")
 include("sylvester.jl")
 include("ordschur.jl")
 
+include("generalized.jl")
+
 end # module
