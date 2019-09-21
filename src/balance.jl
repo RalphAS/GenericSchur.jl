@@ -224,7 +224,7 @@ function lmul!(B::Balancer, A::StridedMatrix{T}) where T
     A
 end
 
-# this is the appropriate transformation for right eigenvectors
+# this should be the appropriate transformation for left eigenvectors
 # stored as columns of a matrix
 function ldiv!(B::Balancer, A::StridedMatrix{T}) where T
     n = checksquare(A)

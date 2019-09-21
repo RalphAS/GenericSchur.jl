@@ -8,6 +8,12 @@
 # Univ. of Colorado Denver
 # NAG Ltd.
 
+function trsylvester!(A::UpperTriangular{T,S}, B::UpperTriangular{T,S},
+                      C::StridedVecOrMat{T};
+                      possign=false) where {T,S<:StridedMatrix{T}}
+    trsylvester!(A.data,B.data,C,possign=possign)
+end
+
 """
     trsylvester!(A,B,C) => X, σ
 
@@ -63,8 +69,14 @@ function trsylvester!(A::StridedMatrix{T},B::StridedMatrix{T},C::StridedVecOrMat
     return C, scale
 end
 
+function adjtrsylvester!(A::UpperTriangular{T,S}, B::UpperTriangular{T,S},
+                         C::StridedVecOrMat{T};
+                         possign=false) where {T,S<:StridedMatrix{T}}
+    adjtrsylvester!(A.data,B.data,C,possign=possign)
+end
+
 """
-    adjtrsylvesterh!(A,B,C) => X, σ
+    adjtrsylvester!(A,B,C) => X, σ
 
 solve the Sylvester equation ``Aᴴ X - X Bᴴ = σ C``,
 for upper triangular `A` and `B`, overwriting `C`
