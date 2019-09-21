@@ -1,21 +1,12 @@
-#module GT
-#using Test, LinearAlgebra, Random
-# using GenericSchur: ggschur!
-#include("../src/generalized.jl")
-
-#Random.seed!(1101)
-
-#using Printf
-
-function schurtest(A::Matrix{T}, B::Matrix{T}, tol;
+function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
                    normal=false, commuting=false) where {T<:Complex}
     n = size(A,1)
     ulp = eps(real(T))
-#    if real(T) <: BlasFloat
+    if real(T) <: BlasFloat
         S = GenericSchur.ggschur!(copy(A), copy(B))
-#    else
-#        S = schur(A, B)
-#    end
+    else
+        S = schur(A, B)
+    end
     # test 1: S.T is upper triangular
     @test norm(tril(S.S,-1)) / (n * norm(A) * ulp) < tol
     @test norm(tril(S.T,-1)) / (n * norm(A) * ulp) < tol
@@ -48,7 +39,7 @@ function schurtest(A::Matrix{T}, B::Matrix{T}, tol;
 end
 
 
-@testset "generalized sanity $T" for T in [ComplexF64]
+@testset "generalized sanity $T" for T in [ComplexF64, Complex{BigFloat}]
 
 unfl = floatmin(real(T))
 ovfl = one(real(T)) / unfl
@@ -63,7 +54,7 @@ ens = [4,32]
     for n in ens
         A = rand(T,n,n)
         B = rand(T,n,n)
-        schurtest(A, B, 20)
+        gschurtest(A, B, 20)
     end
 end # testset
 

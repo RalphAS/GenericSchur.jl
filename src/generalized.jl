@@ -12,6 +12,10 @@ using LinearAlgebra: givensAlgorithm
 
 # decomposition is A = Q S Z', B = Q  Tmat Z'
 
+function schur!(A::StridedMatrix{T}, B::StridedMatrix{T}; kwargs...) where {T<:Complex}
+    ggschur!(A, B; kwargs...)
+end
+
 # ggschur! is similar to LAPACK zgges:
 # Q is Vsl, Z is Vsr
 # Tmat overwrites B
