@@ -38,8 +38,7 @@ The unexported `gschur` and `gschur!` functions are available for types
 normally handled by the LAPACK wrappers in `LinearAlgebra`.
 
 The algorithm is essentially the unblocked, serial, single-shift Francis (QR)
-scheme used in the complex LAPACK routines. Scaling is enabled for balancing,
-but not permutation (which would reduce the work).
+scheme used in the complex LAPACK routines. Balancing is also available.
 
 ### Eigenvectors
 
@@ -90,6 +89,22 @@ lmul!(B, v) # to get the eigenvectors of A
 More details are in the function docstring. Although the balancing function
 also does permutations to isolate trivial subspaces, the Schur routines do not
 yet exploit this opportunity for reduced workload.
+
+## Subspaces, condition, and all that.
+
+Methods for reordering a Schur decomposition (`ordschur`) and computing
+condition numbers (`eigvalscond`) and subspace separation (`subspacesep`)
+are provided.
+The algorithms are translated from LAPACK, but this implementation has
+had limited testing.
+
+## Generalized eigensystems
+
+Methods for the generalized eigenvalue problem (matrix pencils),
+extending `schur(A,B)` from LinearAlgebra, are available as of release 0.3.0.
+The algorithms are translated from LAPACK, but this implementation has
+had limited testing.
+
 
 ## Acknowledgements
 
