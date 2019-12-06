@@ -78,6 +78,15 @@ end
 
 include("util.jl")
 include("hessenberg.jl")
+
+if VERSION < v"1.3"
+    _getdata(H::HessenbergFactorization) = H.data
+    const HessenbergArg = HessenbergFactorization
+else
+    _getdata(H::Hessenberg) = H.H.data
+    const HessenbergArg = Hessenberg
+end
+
 include("householder.jl")
 include("balance.jl")
 
@@ -89,7 +98,7 @@ include("balance.jl")
 # Univ. of California Berkeley
 # Univ. of Colorado Denver
 # NAG Ltd.
-function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
+function _gschur!(H::HessenbergArg{T}, Z=nothing;
                  debug = false,
                  maxiter = 100*size(H, 1), maxinner = 30*size(H, 1), kwargs...
                  ) where {T <: Complex}
@@ -97,7 +106,7 @@ function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
     istart = 1
     iend = n
     w = Vector{T}(undef, n)
-    HH = H.data
+    HH = _getdata(H)
 
     RT = real(T)
     ulp = eps(RT)
@@ -317,14 +326,14 @@ end
 const _STANDARDIZE_DEFAULT = true
 
 # Mostly copied from GenericLinearAlgebra
-function _gschur!(H::HessenbergFactorization{T}, Z=nothing;
+function _gschur!(H::HessenbergArg{T}, Z=nothing;
                   tol = eps(real(T)), debug = false, shiftmethod = :Francis,
                   maxiter = 100*size(H, 1), standardize = _STANDARDIZE_DEFAULT,
                   kwargs...) where {T <: Real}
     n = size(H, 1)
     istart = 1
     iend = n
-    HH = H.data
+    HH = _getdata(H)
     τ = Rotation(Givens{T}[])
     w = Vector{Complex{T}}(undef, n)
     iwcur = n
