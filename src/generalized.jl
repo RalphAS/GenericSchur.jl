@@ -1,8 +1,7 @@
-#using LinearAlgebra
-#using LinearAlgebra: checksquare, givensAlgorithm, Givens
-#using GenericSchur: safemin, abs1, _scale!
+# This file is part of GenericSchur.jl, released under the MIT "Expat" license
+# Portions derived from LAPACK, see below.
 
-# functions for generalized problems
+# Schur decomposition (QZ algorithm) for generalized eigen-problems
 
 # Developer notes:
 # We don't currently implement GeneralizedHessenberg types so anyone else
@@ -108,10 +107,19 @@ function _hessenberg!(A::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z;
     return triu!(A,-1), triu!(B), Q, Z
 end
 
-# translated from zhgeqz
 # single-shift QZ algo
+#
+# translated from LAPACK's zhgeqz
+# LAPACK is released under a BSD license, and is
+# Copyright:
+# Univ. of Tennessee
+# Univ. of California Berkeley
+# Univ. of Colorado Denver
+# NAG Ltd.
+#
 # H is Hessenberg
 # B is upper-triangular
+# This is an internal routine so we don't check.
 function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                debug = false,
                ilo=1, ihi=size(H,1), maxiter=100*(ihi-ilo+1)
@@ -560,3 +568,30 @@ function _geigvecs(S::StridedMatrix{T}, P::StridedMatrix{T},
 
     return vectors
 end # function
+
+"""
+    canonicalize!(S::GeneralizedSchur)
+
+rescale the fields of `S` so that `S.β` and the diagonal of `S.T` are real.
+"""
+function canonicalize!(S::GeneralizedSchur{Ty}) where Ty
+    n = size(S.S,1)
+    sf = safemin(real(Ty))
+    for k=1:n
+        scale = abs(S.T[k,k])
+        if scale > sf
+            t1 = conj(S.T[k,k] / scale)
+            t2 = S.T[k,k] / scale
+            S.T[k,k+1:n] .*= t1
+            S.S[k,k:n] .*= t1
+            if !(S.Q === nothing) && !isempty(S.Q)
+                S.Q[:,k] .*= t2
+            end
+        else
+            S.T[k,k] = zero(Ty)
+        end
+        S.α[k] = S.S[k,k]
+        S.β[k] = S.T[k,k]
+    end
+    S
+end

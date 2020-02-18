@@ -77,6 +77,7 @@ end
 
 
 include("util.jl")
+include("lapack_extras.jl")
 include("hessenberg.jl")
 
 if VERSION < v"1.3"
@@ -723,8 +724,11 @@ include("triang.jl")
 
 include("norm1est.jl")
 include("sylvester.jl")
-include("ordschur.jl")
 
 include("generalized.jl")
+include("gsylvester.jl")
+
+include("ordschur.jl")
+include("gcondition.jl")
 
 end # module

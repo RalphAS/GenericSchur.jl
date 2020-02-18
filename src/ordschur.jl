@@ -120,3 +120,138 @@ function subspacesep(S::Schur{Ty}, nsub) where Ty
     est = norm1est!(f,fH,zeros(Ty,nsub*(n-nsub)))
     return scale / est
 end
+
+function _ordschur(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+                   Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
+                   select::Union{Vector{Bool},BitVector}) where Ty <: Complex
+    _ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
+end
+
+function _ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+                    Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
+                    select::Union{Vector{Bool},BitVector}) where Ty <: Complex
+    n = size(S,1)
+    ks = 0
+    for k=1:n
+        if select[k]
+            ks += 1
+            if k != ks
+                _trexchange!(S,T,Q,Z,k,ks)
+            end
+        end
+    end
+    triu!(S)
+    triu!(T)
+    S,T,diag(S),diag(T),Q,Z
+end
+
+"""
+    IllConditionException
+
+Exception thrown when argument matrix or matrices are too ill-conditioned
+for the requested operation. The `index` field may indicate the block
+where near-singularity was detected.
+"""
+struct IllConditionException <: Exception
+    index::Integer
+end
+
+function _trexchange!(A,B,Q,Z,iold,inew)
+    if iold < inew
+        icur = iold
+        while icur < ilast
+            _trexch2!(A,B,Q,Z,icur)
+            icur += 1
+        end
+        icur -= 1
+    else
+        icur =  iold-1
+        while icur >= inew
+            _trexch2!(A,B,Q,Z,icur)
+            icur -= 1
+        end
+        icur += 1
+    end
+    nothing
+end
+
+# swap adjacent 1x1 blocks in UT pair (A,B) via unitary equivalence transform
+# apply same transform to associated Q,Z
+function _trexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1) where Ty
+    S = A[j1:j1+1,j1:j1+1]
+    T = B[j1:j1+1,j1:j1+1]
+    # compute threshold for acceptance
+    Tr = real(Ty)
+    smlnum = safemin(Tr) / eps(Tr)
+    scale = zero(Tr)
+    sumsq = one(Tr)
+    W = hcat(S,T)
+    scale, sumsq = _ssq(vec(W), scale, sumsq)
+    sa = scale * sqrt(sumsq)
+    thresh = max(Tr(20)*eps(Tr)*sa, smlnum)
+
+    # compute Givens rotations which would swap blocks
+    # and tentatively do it
+    f = S[2,2] * T[1,1] - T[2,2] * S[1,1]
+    g = S[2,2] * T[1,2] - T[2,2] * S[1,2]
+    sa = abs(S[2,2])
+    sb = abs(T[2,2])
+    cz, sz, _ = givensAlgorithm(g,f)
+    Gz2 = Givens(1,2,Ty(cz),-sz)
+    rmul!(S,adjoint(Gz2))
+    rmul!(T,adjoint(Gz2))
+    if sa >= sb
+        cq, sq, _ = givensAlgorithm(S[1,1],S[2,1])
+    else
+        cq, sq, _ = givensAlgorithm(T[1,1],T[2,1])
+    end
+    Gq2 = Givens(1,2,Ty(cq),sq)
+    lmul!(Gq2,S)
+    lmul!(Gq2,T)
+    # weak stability test: subdiags <= O( ϵ norm((S,T),"F"))
+    ws = abs(S[2,1]) + abs(T[2,1])
+    weak_ok = ws <= thresh
+
+    if !weak_ok
+        throw(IllConditionException(j1))
+    end
+
+    if false
+        # FIXME: not yet checked, needs example
+
+        # Strong stability test
+        # Supposedly equiv. to
+        # |[A-Qᴴ*S*Z, B-Qᴴ*T*Z]| <= O(1) ϵ |[A,B]| in F-norm
+        # which appears rather strange
+        Ss = copy(S)
+        Ts = copy(T)
+        Gz2 = Givens(1,2,Ty(cz),sz)
+        rmul!(Ss,adjoint(Gz2))
+        rmul!(Ts,adjoint(Gz2))
+        Gq2 = Givens(1,2,Ty(cq),-sq)
+        lmul!(Gq2,Ss)
+        lmul!(Gq2,Ts)
+        Ss .-= A[j1:j1+1,j1:j1+1]
+        Ts .-= B[j1:j1+1,j1:j1+1]
+        scale = zero(Tr)
+        sumsq = one(Tr)
+        W = hcat(Ss,Ts)
+        scale, sumsq = _ssq(vec(W), scale, sumsq)
+        ss = scale * sqrt(sumsq)
+        strong_ok = ss <= thresh
+        if !strong_ok
+            throw(IllConditionException(j1))
+        end
+    end
+
+    Gz = Givens(j1,j1+1,Ty(cz),-sz)
+    rmul!(A,adjoint(Gz))
+    rmul!(B,adjoint(Gz))
+    Gq = Givens(j1,j1+1,Ty(cq),sq)
+    lmul!(Gq,A)
+    lmul!(Gq,B)
+    A[j1+1,j1] = zero(Ty)
+    B[j1+1,j1] = zero(Ty)
+    rmul!(Z,adjoint(Gz))
+    rmul!(Q,adjoint(Gq))
+end

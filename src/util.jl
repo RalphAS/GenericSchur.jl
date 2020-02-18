@@ -404,3 +404,34 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
     end
     xscale
 end
+
+# update scale and sumsq s.t. (scale^2 * sumsq) is increased by ∑ |x[j]|^2
+# scale is a running quasi-inf-norm.
+# based on LAPACK::zlassq
+function _ssq(x::AbstractVector{T}, scale, sumsq) where {T}
+    n = length(x)
+    rone = one(real(T))
+    for ix=1:n
+        t1 = abs(real(x[ix]))
+        if t1 > 0 || isnan(t1)
+            if scale < t1
+                sumsq = rone + sumsq * (scale / t1)^2
+                scale = t1
+            else
+                sumsq += (t1 / scale)^2
+            end
+        end
+        if T <: Complex
+            t1 = abs(imag(x[ix]))
+            if t1 > 0 || isnan(t1)
+                if scale < t1
+                    sumsq = rone + sumsq * (scale / t1)^2
+                    scale = t1
+                else
+                    sumsq += (t1 / scale)^2
+                end
+            end
+        end
+    end
+    return scale, sumsq
+end

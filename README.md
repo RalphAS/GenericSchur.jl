@@ -100,10 +100,15 @@ had limited testing.
 
 ## Generalized eigensystems
 
-Methods for the generalized eigenvalue problem (matrix pencils),
-extending `schur(A,B)` from LinearAlgebra, are available as of release 0.3.0.
+Methods for the generalized eigenvalue problem (matrix pencils) with
+`Complex` element types are available as of release 0.3.0;
+in particular, extension of `schur(A,B)` from LinearAlgebra.
 The algorithms are translated from LAPACK, but this implementation has
-had limited testing.
+had limited testing. (Note that it is easy to check the decomposition
+of a particular case ex post facto.)
+
+Corresponding functions for reordering and condition
+estimation are included, but should be considered work in progress.
 
 
 ## Acknowledgements

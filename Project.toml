@@ -1,6 +1,6 @@
 name = "GenericSchur"
 uuid = "c145ed77-6b09-5dd9-b285-bf645a82121e"
-version = "0.3.0"
+version = "0.3.1-DEV"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -10,9 +10,10 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 julia = "1"
 
 [extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+GenericSVD = "01680d73-4ee2-5a08-a1aa-533608c188bb"
 
 [targets]
-test = ["Test","Random","Libdl"]
+test = ["Test", "Random", "Libdl", "GenericSVD"]

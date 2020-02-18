@@ -38,5 +38,6 @@ include("complex.jl")
 include("ordschur.jl")
 
 include("generalized.jl")
+include("gordschur.jl")
 
 end # module
