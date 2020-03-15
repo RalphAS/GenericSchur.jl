@@ -48,6 +48,11 @@ function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
     @test norm(As * VR - VR * diagm(0 => Ss.values)) / (n * norm(As) * ulp) < vtol
     VL = eigvecs(Ss, left=true)
     @test norm(As' * VL - VL * diagm(0 => conj.(Ss.values))) / (n * norm(As) * ulp) < vtol
+    if normal
+        # check orthonormality of vectors where appropriate
+        @test norm(VR*VR'-I) / (n * ulp) < vtol
+        @test norm(VL*VL'-I) / (n * ulp) < vtol
+    end
 end
 
 

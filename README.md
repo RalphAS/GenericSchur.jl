@@ -50,8 +50,16 @@ S = schur(A)
 VR = eigvecs(S)
 VL = eigvecs(S,left=true)
 ```
+
 The results are currently unreliable if the Frobenius norm of `A` is very
 small or very large, so scale if necessary.
+
+#### Normalization
+
+As of v0.4, eigenvectors as returned from our `eigen` and `eigvecs` methods
+for the standard problem have unit Euclidean norm. This accords with the
+current (undocumented) behavior of `LinearAlgebra` methods. (Previously a
+convention based on low-level LAPACK routines was used here.)
 
 ### Real decompositions
 
@@ -95,8 +103,9 @@ yet exploit this opportunity for reduced workload.
 Methods for reordering a Schur decomposition (`ordschur`) and computing
 condition numbers (`eigvalscond`) and subspace separation (`subspacesep`)
 are provided.
-The algorithms are translated from LAPACK, but this implementation has
-had limited testing.
+Tests to date suggest that behavior is analogous
+to the LAPACK routines on which the implementation is based.
+
 
 ## Generalized eigensystems
 
@@ -108,7 +117,10 @@ had limited testing. (Note that it is easy to check the decomposition
 of a particular case ex post facto.)
 
 Corresponding functions for reordering and condition
-estimation are included, but should be considered work in progress.
+estimation are included. Tests to date suggest that behavior is analogous
+to LAPACK.
+
+Generalized eigenvectors are not yet provided.
 
 
 ## Acknowledgements

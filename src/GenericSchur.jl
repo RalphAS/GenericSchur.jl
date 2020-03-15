@@ -22,6 +22,8 @@ end
 
 Compute right or left eigenvectors from a Schur decomposition.
 Eigenvectors are returned as columns of a matrix.
+The returned eigenvectors have unit Euclidean norm, and the largest
+elements are real.
 """
 function eigvecs(S::Schur{T}; left::Bool=false) where {T <: Complex}
     if left
@@ -29,7 +31,28 @@ function eigvecs(S::Schur{T}; left::Bool=false) where {T <: Complex}
     else
         v = _geigvecs!(S.T,S.Z)
     end
+    _enormalize!(v)
     v
+end
+function _enormalize!(v::AbstractMatrix{T}) where T
+    n = size(v,1)
+    for j=1:n
+        s = one(real(T)) / norm(v[:,j],2)
+        t = abs2(v[1,j])
+        i0 = 1
+        for i=2:n
+            u = abs2(v[i,j])
+            if  u > t
+                i0 = i
+                t = u
+            end
+        end
+        t = s * conj(v[i0,j]) / sqrt(t)
+        for i=1:n
+            v[i,j] *=  t
+        end
+        v[i0,j] = real(v[i0,j])
+    end
 end
 
 if VERSION < v"1.2-"
@@ -44,10 +67,11 @@ function eigen!(A::StridedMatrix{T}; permute=true, scale=true,
         A, B = balance!(A, scale=scale, permute=permute)
     end
     S = triangularize(schur(A))
-    v = eigvecs(S)
+    v = _geigvecs!(S.T,S.Z)
     if permute || scale
         lmul!(B, v)
     end
+    _enormalize!(v)
     if sortby !== nothing
         return LinearAlgebra.Eigen(sorteig!(S.values, v, sortby)...)
     else
@@ -61,10 +85,11 @@ function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
         A, B = balance!(A, scale=scale, permute=permute)
     end
     S = schur(A)
-    v = eigvecs(S)
+    v = _geigvecs!(S.T,S.Z)
     if permute || scale
         lmul!(B, v)
     end
+    _enormalize!(v)
     if sortby !== nothing
         return LinearAlgebra.Eigen(sorteig!(S.values, v, sortby)...)
     else
