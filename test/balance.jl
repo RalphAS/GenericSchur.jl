@@ -2,12 +2,25 @@ function run_unbalanced(A::AbstractMatrix{T}) where T
     n = size(A,1)
     fu = eigen(A, scale=false)
     if T <: BlasFloat
-        # use our code for balancing
+        # use our code for balancing since that's what we're testing
         Abal,  B = balance!(copy(A))
-        fb1 = eigen(Abal)
+        fb1 = eigen(Abal, scale=false)
         fb = LinearAlgebra.Eigen(fb1.values, lmul!(B, fb1.vectors))
     else
         fb = eigen(A, scale=true)
+    end
+    if VERSION < v"1.2-"
+        # compensate for sometime uncontrolled order of eigenvalues
+        ewu, vu = fu
+        ewb, vb = fb
+        p = sortperm(real.(ewu))
+        ewu = ewu[p]
+        vu = vu[:,p]
+        fu = LinearAlgebra.Eigen(ewu,vu)
+        p = sortperm(real.(ewb))
+        ewb = ewb[p]
+        vb = vb[:,p]
+        fb = LinearAlgebra.Eigen(ewb,vb)
     end
     fu, fb
 end
@@ -37,7 +50,7 @@ end
     fu, fb = run_unbalanced(A)
     ru = maximum([abs(fu.values[j]-λ[j]) for j in 1:3])
     rb = maximum([abs(fb.values[j]-λ[j]) for j in 1:3])
-    @test ru > rb
+    @test ru > 100rb
 end
 
 # This is a convenient place for other checks of the simple wrapper.
