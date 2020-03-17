@@ -120,8 +120,11 @@ Corresponding functions for reordering and condition
 estimation are included. Tests to date suggest that behavior is analogous
 to LAPACK.
 
-Generalized eigenvectors are not yet provided.
-
+Right eigenvectors of generalized problems are available with
+`V = eigvecs(S::GeneralizedSchur{<:Complex})`. Column `j` of `V` satisfies
+`S.beta[j] * A * v ≈ S.alpha[j] * B * v`.
+These currently have a peculiar norm intended to be compatible with LAPACK
+conventions.
 
 ## Acknowledgements
 

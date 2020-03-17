@@ -417,7 +417,10 @@ end
 
 function eigvecs(S::GeneralizedSchur, left=false)
     left && throw(ArgumentError("not implemented"))
-    return _geigvecs(S.S, S.T, S.Z)
+    v = _geigvecs(S.S, S.T, S.Z)
+    # CHECKME: Euclidean norm differs from LAPACK, so wait for upstream.
+    # _enormalize!(v)
+    return v
 end
 
 
@@ -436,7 +439,7 @@ function _geigvecs(S::StridedMatrix{T}, P::StridedMatrix{T},
     ulp = eps(RT)
     safmin = safemin(RT)
     smallnum = safmin * (n / ulp)
-    big = one(RT) / smallnum
+    bigx = one(RT) / smallnum
     bignum = one(RT) / (n * safmin)
 
     vectors = Matrix{T}(undef,n,n)
@@ -445,7 +448,7 @@ function _geigvecs(S::StridedMatrix{T}, P::StridedMatrix{T},
         v2 = zeros(T,n)
     end
 
-    # We use the 1-norms of the strictly upper part of S columns
+    # We use the 1-norms of the strictly upper part of S, P columns
     # to avoid overflow
     anorm = abs1(S[1,1])
     bnorm = abs1(P[1,1])
@@ -483,10 +486,10 @@ function _geigvecs(S::StridedMatrix{T}, P::StridedMatrix{T},
             lsb = abs1(sα) >= safmin && abs1(bcoeff) < smallnum
             s = one(RT)
             if lsa
-                s = (smallnum / abs(sβ)) * min(anorm, big)
+                s = (smallnum / abs(sβ)) * min(anorm, bigx)
             end
             if lsb
-                s = max(s, (smallnum / abs1(sα)) * min(bnorm, big))
+                s = max(s, (smallnum / abs1(sα)) * min(bnorm, bigx))
             end
             if lsa || lsb
                 s = min(s, 1 / (safmin * max( one(RT), abs(acoeff),
@@ -506,7 +509,6 @@ function _geigvecs(S::StridedMatrix{T}, P::StridedMatrix{T},
             acb = abs1(bcoeff)
             xmax = one(RT)
             v .= zero(T)
-            v[ki] = one(T)
             dmin = max(ulp * aca * anorm, ulp * acb * bnorm, safmin)
 
             # triangular solve of (a A - b B) x = 0, columnwise
