@@ -1,5 +1,9 @@
 const badevs = Ref{Int}(0)
 using Printf
+
+diagnosing = Sys.iswindows()
+const dgn = Ref(diagnosing)
+
 function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
     n = size(A,1)
     ulp = eps(real(T))
@@ -11,7 +15,13 @@ function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
     # test 1: S.T is upper triangular
     @test all(tril(S.T,-1) .== 0)
     # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
-    @test norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
+    if verbosity[] > 1
+        decomp_err = norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp)
+        println("decomp. error: ", decomp_err)
+        @test decomp_err < tol
+    else
+        @test norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
+    end
     # test 3: S.Z is unitary: norm(I - S.Z * S.Z') / (n * ulp) < tol
     @test norm(I - S.Z * S.Z') / (n * ulp) < tol
     # test 4: S.values are e.v. of T
@@ -45,7 +55,13 @@ function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
         end
     end
     VR = eigvecs(Ss)
-    @test norm(As * VR - VR * diagm(0 => Ss.values)) / (n * norm(As) * ulp) < vtol
+    if verbosity[] > 1
+        vec_err = norm(As * VR - VR * diagm(0 => Ss.values)) / (n * norm(As) * ulp)
+        println("eigenvector error: $vec_err, vtol = $vtol")
+        @test vec_err < 1000
+    else
+        @test norm(As * VR - VR * diagm(0 => Ss.values)) / (n * norm(As) * ulp) < vtol
+    end
     VL = eigvecs(Ss, left=true)
     @test norm(As' * VL - VL * diagm(0 => conj.(Ss.values))) / (n * norm(As) * ulp) < vtol
     if normal
@@ -181,6 +197,12 @@ magns = [1.0, ovfl*ulp, unfl*ulpinv]
     end
 end
 
+if dgn[]
+    old_verbosity = verbosity[]
+    verbosity[] = 2
+    tols[6] = 100
+end
+
 @testset "general, ev specified" begin
     itype=6
     kmagn =  [1,1,1,1,1,1,1,1,2,3]
@@ -203,6 +225,9 @@ end
             schurtest(A,tols[itype])
         end
     end
+end
+if dgn[]
+  verbosity[] = old_verbosity
 end
 
 @testset "diagonal, random ev" begin
