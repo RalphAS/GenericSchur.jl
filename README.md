@@ -6,7 +6,7 @@
 ![Lifecycle](https://img.shields.io/badge/lifecycle-retired-orange.svg)
 ![Lifecycle](https://img.shields.io/badge/lifecycle-archived-red.svg)
 ![Lifecycle](https://img.shields.io/badge/lifecycle-dormant-blue.svg) -->
-[![Build Status](https://travis-ci.com/RalphAS/GenericSchur.jl.svg?branch=master)](https://travis-ci.com/RalphAS/GenericSchur.jl)
+[![GitHub CI Build Status](https://github.com/RalphAS/GenericSchur.jl/workflows/CI/badge.svg)](https://github.com/RalphAS/GenericSchur.jl/actions)
 [![codecov.io](http://codecov.io/github/RalphAS/GenericSchur.jl/coverage.svg?branch=master)](http://codecov.io/github/RalphAS/GenericSchur.jl?branch=master)
 
 ## Schur decomposition for matrices of generic element types in Julia
