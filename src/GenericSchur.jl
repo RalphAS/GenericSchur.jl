@@ -258,12 +258,7 @@ function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
     end
     H = _hessenberg!(A)
     if wantZ
-        τ = H.τ # Householder reflectors w/ scales
-        Z = Matrix{T}(I, n, n)
-        for j=n-1:-1:1
-            lmul!(τ[j], view(Z, j+1:n, j:n))
-            Z[1:j-1,j] .= 0
-        end
+        Z = _materializeQ(H)
         S = _gschur!(H, Z; kwargs...)
     else
         S = _gschur!(H; kwargs...)
@@ -622,11 +617,7 @@ function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
     end
     H = _hessenberg!(A)
     if wantZ
-        Z = Matrix{T}(I, n, n)
-        for j=n-1:-1:1
-            lmul!(H.τ[j], view(Z, j+1:n, j:n))
-            Z[1:j-1,j] .= 0
-        end
+        Z = _materializeQ(H)
         S = _gschur!(H, Z; kwargs...)
     else
         S = _gschur!(H; kwargs...)
