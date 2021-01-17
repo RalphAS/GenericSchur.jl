@@ -12,7 +12,7 @@ if VERSION < v"1.3"
 
     function _hessenberg!(A::StridedMatrix{T}) where T
         n = LinearAlgebra.checksquare(A)
-        τ = Vector{T}(undef, n - 1)
+        τ = Vector{Householder{T}}(undef, n - 1)
         for i = 1:n - 1
             xi = view(A, i + 1:n, i)
             t  = LinearAlgebra.reflector!(xi)
@@ -24,7 +24,8 @@ if VERSION < v"1.3"
         return HessenbergFactorization{T, typeof(A), eltype(τ)}(A, τ)
     end
 
-    function _materializeQ(H::HessenbergFactorization)
+    function _materializeQ(H::HessenbergFactorization{T}) where T
+        n = size(H.data, 1)
         Z = Matrix{T}(I, n, n)
         for j=n-1:-1:1
             lmul!(H.τ[j], view(Z, j+1:n, j:n))
