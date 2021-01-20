@@ -100,6 +100,16 @@ end
 ############################################################################
 # Internal implementation follows
 
+macro mydebug(expr); nothing; end
+
+function _fmt_nr(z::Complex)
+    s = @sprintf("%10.3e%+10.3eim", reim(z)...)
+    return s
+end
+function _fmt_nr(x::Real)
+    s = @sprintf("%10.3e", x)
+    return s
+end
 
 include("util.jl")
 include("lapack_extras.jl")
@@ -116,7 +126,6 @@ end
 include("householder.jl")
 include("balance.jl")
 
-# Largely based on code in GenericLinearAlgebra
 #
 # portions translated from LAPACK::zlahqr
 # LAPACK Copyright:
@@ -125,7 +134,6 @@ include("balance.jl")
 # Univ. of Colorado Denver
 # NAG Ltd.
 function _gschur!(H::HessenbergArg{T}, Z=nothing;
-                 debug = false,
                  maxiter = 100*size(H, 1), maxinner = 30*size(H, 1), kwargs...
                  ) where {T <: Complex}
     n = size(H, 1)
@@ -141,10 +149,18 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
     half = 1 / RT(2)
     threeq = 3 / RT(4)
 
+    for j=1:n-1
+        HH[j+2:n,j] .= zero(T)
+    end
+
     # iteration count
     it = 0
 
     @inbounds while iend >= 1
+        # key for comparison to zlahqr:
+        # I => iend
+        # L => istart
+        # K => _istart + 1
         istart = 1
         for its=0:maxinner
             it += 1
@@ -153,12 +169,12 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
             end
 
             # Determine if the matrix splits.
-            # Find lowest positioned subdiagonal "zero" if any; reset istart
-            for _istart in iend - 1:-1:istart
-                debug && @printf("Subdiagonal element is: %10.3e%+10.3eim and istart,iend now %6d:%6d\n", reim(HH[_istart+1, _istart])..., istart,iend)
-                if abs1(HH[_istart + 1, _istart]) <= smallnum
+            # Find lowest positioned subdiagonal "zero" if any; reset istart if found.
+            for _istart in iend-1:-1:istart
+                if abs1(HH[_istart+1, _istart]) <= smallnum
                     istart = _istart + 1
-                    debug && @printf("Split1! Subdiagonal element is: %10.3e%+10.3eim and istart now %6d\n", reim(HH[istart, istart - 1])..., istart)
+                    @mydebug println("Split1! at istart = $istart, subdiag is ",
+                                     _fmt_nr(HH[istart, istart-1]))
                     break
                 end
                 # deflation criterion from Ahues & Tisseur (LAWN 122, 1997)
@@ -179,11 +195,11 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
                     s = aa + ab
                     if ba * (ab / s) <= max(smallnum, ulp * (bb * (aa / s)))
                         istart = _istart + 1
-                        debug && @printf("Split2! Subdiagonal element is: %10.3e%+10.3eim and istart now %6d\n", reim(HH[istart, istart - 1])..., istart)
+                        @mydebug println("Split2! at istart = $istart, subdiag is ",
+                                         _fmt_nr(HH[istart, istart-1]))
                         break
                     end
                 end
-                # istart = 1
             end # check for split
 
             if istart > 1
@@ -193,9 +209,9 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
 
             # if block size is one we deflate
             if istart >= iend
-                debug && @printf("Bottom deflation! Block size is one. New iend is %6d\n", iend - 1)
                 iend -= 1
-                break
+                @mydebug println("Bottom deflation! Block size is one. New iend is $iend")
+                break # from "inner" loop
             end
 
             # select shift
@@ -207,6 +223,7 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
                 s = threeq * abs(real(HH[iend,iend-1]))
                 t = s + HH[iend,iend]
             else
+                # Wilkinson's shift
                 t = HH[iend,iend]
                 u = sqrt(HH[iend-1,iend]) * sqrt(HH[iend,iend-1])
                 s = abs1(u)
@@ -225,8 +242,9 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
             end # shift selection
 
             # run a QR iteration
-            debug && @printf("block start is: %6d, block end is: %6d, t: %10.3e%+10.3eim\n", istart, iend, reim(t)...)
-            # zlahqr only has single-shift
+            @mydebug println("block range $(istart):$(iend) shift ", _fmt_nr(t))
+
+            # following zlahqr, only use single-shift
             singleShiftQR!(HH, Z, t, istart, iend)
 
         end # inner loop
@@ -270,77 +288,134 @@ function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
     S
 end
 
-# Note: zlahqr exploits the fact that some terms are real to reduce
-# arithmetic load.  Does that also work with Givens version?
-# Is it worth the trouble?
-
 function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer, iend::Integer) where {T <: Complex}
-    m = size(HH, 1)
+    n = size(HH, 1)
     ulp = eps(real(eltype(HH)))
+
+    @mydebug Hsave = Z*HH*Z'
+    function dcheck(str)
+        print(str," decomp err ", norm(Hsave - Z*HH*Z'))
+    end
+
+    # key:
+    # istart => L
+    # iend => I
+    # istart1 => M
 
     # look for two consecutive small subdiagonals
     istart1 = -1
     h11s = zero(eltype(HH))
     h21 = zero(real(eltype(HH)))
-    for mm = iend-1:-1:istart+1
+    flag = false
+    v = zeros(T,2)
+    @inbounds for mm = iend-1:-1:istart+1
         # determine the effect of starting the single-shift Francis
         # iteration at row mm: see if this would make HH[mm,mm-1] tiny.
         h11 = HH[mm,mm]
         h22 = HH[mm+1,mm+1]
         h11s = h11 - shift
-#        h21 = real(HH[mm+1,mm]) # for reflector
-        h21 = HH[mm+1,mm]
+        h21 = real(HH[mm+1,mm]) # for reflector
         s = abs1(h11s) + abs(h21)
         h11s /= s
         h21 /= s
+        v .= (h11s, T(h21))
         h10 = real(HH[mm,mm-1])
-        if abs(h10)*abs(h21) <= ulp *
-            (abs1(h11s)*(abs1(h11)+abs1(h22)))
+        if abs(h10) * abs(h21) <= ulp * (abs1(h11s) * (abs1(h11) + abs1(h22)))
             istart1 = mm
+            flag = true
             break
         end
     end
-    if istart1 < 1
+    @inbounds begin
+      if !flag
         istart1 = istart
         h11 = HH[istart,istart]
         h22 = HH[istart+1,istart+1]
         h11s = h11 - shift
-        # h21 = real(HH[istart+1,istart]) # for reflector
-        h21 = HH[istart+1,istart]
+        h21 = real(HH[istart+1,istart])
         s = abs1(h11s) + abs(h21)
         h11s /= s
         h21 /= s
+        v .= (h11s,T(h21))
+      end
     end
 
-    if m > istart1 + 1
-        Htmp = HH[istart1 + 2, istart1]
-        HH[istart1 + 2, istart1] = 0
-    end
-
-    # create a bulge
-    G, _ = givens(h11s, h21, istart1, istart1 + 1)
-    lmul!(G, view(HH, :, istart1:m))
-    rmul!(view(HH, 1:min(istart1 + 2, iend), :), G')
-    Z === nothing || rmul!(Z, G')
-    # do we need this? LAPACK uses Householder so some work would be needed
-    # if istart1 > istart
-        # if two consecutive small subdiagonals were found, scale
-        # so HH[istart1,istart1-1] remains real.
-    # end
-
-    # chase the bulge down
-    for i = istart1:iend - 2
-        # i is K-1, istart is M
-        G, _ = givens(HH[i + 1, i], HH[i + 2, i], i + 1, i + 2)
-        lmul!(G, view(HH, :, i:m))
-        HH[i + 2, i] = Htmp
-        if i < iend - 2
-            Htmp = HH[i + 3, i + 1]
-            HH[i + 3, i + 1] = 0
+    @inbounds for k = istart1:iend-1
+        if k > istart1
+            # prepare to chase bulge
+            v .= (HH[k,k-1], HH[k+1,k-1])
+        # else
+        #    use v from above to create a bulge
         end
-        rmul!(view(HH, 1:min(i + 3, iend), :), G')
-        Z === nothing || rmul!(Z, G')
+        τ1 = LinearAlgebra.reflector!(v)
+        if k > istart1
+            HH[k,k-1] = v[1]
+            HH[k+1,k-1] = zero(T)
+        end
+        v2 = v[2]
+        τ2 = real(τ1*v2)
+        # lmul!(R,view(HH,:,k:n))
+        for j = k:n
+            ss = τ1' * HH[k,j] + τ2 * HH[k+1,j]
+            HH[k,j] -= ss
+            HH[k+1,j] -= ss * v2
+        end
+        # rmul!(view(HH,1:min(iend,k+2),:),R)
+        for j = 1:min(k+2,iend)
+            ss = τ1 * HH[j,k] + τ2 * HH[j,k+1]
+            HH[j,k] -= ss
+            HH[j,k+1] -= ss * v2'
+        end
+        if !(Z === nothing)
+            # rmul!(Z,R)
+            for j = 1:n
+                ss = τ1 * Z[j,k] + τ2 * Z[j,k+1]
+                Z[j,k] -= ss
+                Z[j,k+1] -= ss * v2'
+            end
+        end
+        if (k == istart1) && (istart1 > istart)
+            # If the QR step started at a row below istart because two consecutive
+            # small subdiagonals were found, extra scaling must be performed
+            # to ensure reality of HH[istart1,istart1-1]
+            t = 1 - τ1
+            t /= abs(t)
+            HH[istart1+1,istart1] *= t'
+            if istart1 + 2 <= iend
+                HH[istart1+2, istart1+1] *= t
+            end
+            for j = istart1:iend
+                if j != istart1 + 1
+                    if n > j
+                        HH[j,j+1:n] *= t
+                    end
+                    HH[1:j-1,j] *= t'
+                    if !(Z === nothing)
+                        Z[1:n, j] *= t'
+                    end
+                end
+            end
+        end
+        @mydebug dcheck(" QR k=$k")
     end
+    # ensure reality of tail
+    @inbounds begin
+      t = HH[iend,iend-1]
+      if imag(t) != 0
+        rt = abs(t)
+        HH[iend, iend-1] = rt
+        t /= rt
+        if n > iend
+            HH[iend, iend+1:n] *= t'
+        end
+        HH[1:iend-1, iend] *= t
+        if !(Z === nothing)
+            Z[1:n, iend] *= t
+        end
+      end
+    end
+    @mydebug dcheck(" QR post")
+    @mydebug println()
     return HH
 end
 
@@ -348,7 +423,7 @@ const _STANDARDIZE_DEFAULT = true
 
 # Mostly copied from GenericLinearAlgebra
 function _gschur!(H::HessenbergArg{T}, Z=nothing;
-                  tol = eps(real(T)), debug = false, shiftmethod = :Francis,
+                  tol = eps(real(T)), shiftmethod = :Francis,
                   maxiter = 100*size(H, 1), standardize = _STANDARDIZE_DEFAULT,
                   kwargs...) where {T <: Real}
     n = size(H, 1)
@@ -376,20 +451,14 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
         for _istart in iend - 1:-1:1
             if abs(HH[_istart + 1, _istart]) < tol*(abs(HH[_istart, _istart]) + abs(HH[_istart + 1, _istart + 1]))
                     istart = _istart + 1
-                if T <: Real
-                    debug && @printf("Split! Subdiagonal element is: %10.3e and istart now %6d\n", HH[istart, istart - 1], istart)
-                    standardize && (HH[istart, istart-1] = 0) # clean
-                else
-                    debug && @printf("Split! Subdiagonal element is: %10.3e%+10.3eim and istart now %6d\n", reim(HH[istart, istart - 1])..., istart)
-                end
+                @mydebug println("Split1! at $istart, subdiagonal element is ",
+                                 _fmt_nr(HH[istart, istart-1]))
+                standardize && (HH[istart, istart-1] = 0) # clean
                 break
             elseif _istart > 1 && abs(HH[_istart, _istart - 1]) < tol*(abs(HH[_istart - 1, _istart - 1]) + abs(HH[_istart, _istart]))
-                if T <: Real
-                    debug && @printf("Split! Next subdiagonal element is: %10.3e and istart now %6d\n", HH[_istart, _istart - 1], _istart)
-                else
-                    debug && @printf("Split! Next subdiagonal element is: %10.3e%+10.3eim and istart now %6d\n", reim(HH[_istart, _istart - 1])..., _istart)
-                end
                 istart = _istart
+                @mydebug println("Split2! at $istart, subdiagonal element is ",
+                                 _fmt_nr(HH[_istart, _istart-1]))
                 break
             end
             istart = 1
@@ -397,16 +466,15 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
 
         # if block size is one we deflate
         if istart >= iend
-            debug && @printf("Bottom deflation! Block size is one. New iend is %6d\n", iend - 1)
+
             standardize && putw!(w,HH[iend,iend])
             iend -= 1
-
+            @mydebug println("Bottom deflation! Block size is one. New iend is $iend")
         # and the same for a 2x2 block
         elseif istart + 1 == iend
-            debug && @printf("Bottom deflation! Block size is two. New iend is %6d\n", iend - 2)
+            @mydebug println("Bottom deflation! Block size is two. New iend is $(iend-2)")
 
             if standardize
-                debug && println("std. iend = $iend")
                 H2 = HH[iend-1:iend,iend-1:iend]
                 G2,w1,w2 = _gs2x2!(H2,iend)
                 putw!(w,w2)
@@ -427,14 +495,18 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
         else
             Hmm = HH[iend, iend]
             Hm1m1 = HH[iend - 1, iend - 1]
-            d = Hm1m1*Hmm - HH[iend, iend - 1]*HH[iend - 1, iend]
-            t = Hm1m1 + Hmm
-            t = iszero(t) ? eps(real(one(t))) : t # introduce a small pertubation for zero shifts
-            if T <: Real
-                debug && @printf("block start is: %6d, block end is: %6d, d: %10.3e, t: %10.3e\n", istart, iend, d, t)
+            if iszero(i % 10)
+                # Use Eispack exceptional shift
+                β = abs(HH[iend, iend - 1]) + abs(HH[iend - 1, iend - 2])
+                d = (Hmm + β)^2 - Hmm*β/2
+                t = 2*Hmm + 3*β/2
             else
-                debug && @printf("block start is: %6d, block end is: %6d, d: %10.3e%+10.3eim, t: %10.3e%+10.3eim\n", istart, iend, reim(d)..., reim(t)...)
+                d = Hm1m1*Hmm - HH[iend, iend - 1]*HH[iend - 1, iend]
+                t = Hm1m1 + Hmm
             end
+            # t = iszero(t) ? eps(real(one(t))) : t # introduce a small pertubation for zero shifts
+            @mydebug println("block range: $(istart):$(iend) d: ", _fmt_nr(d),
+                             " t: ", _fmt_nr(t))
 
             if shiftmethod == :Francis
                 # Run a bulge chase
@@ -442,11 +514,10 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
                     # Vary the shift strategy to avoid dead locks
                     # We use a Wilkinson-like shift as suggested in "Sandia technical report 96-0913J: How the QR algorithm fails to converge and how fix it".
 
-                    if T <: Real
-                        debug && @printf("Wilkinson-like shift! Subdiagonal is: %10.3e, last subdiagonal is: %10.3e\n", HH[iend, iend - 1], HH[iend - 1, iend - 2])
-                    else
-                        debug && @printf("Wilkinson-like shift! Subdiagonal is: %10.3e%+10.3eim, last subdiagonal is: %10.3e%+10.3eim\n", reim(HH[iend, iend - 1])..., reim(HH[iend - 1, iend - 2])...)
-                    end
+                    @mydebug println("Wilkinson-like shift! Subdiagonal is: ",
+                                     _fmt_nr(HH[iend, iend - 1]),
+                                     " last subdiagonal is: ",
+                                     _fmt_nr(HH[iend-1, iend-2]))
                     _d = t*t - 4d
 
                     if _d isa Real && _d >= 0
@@ -461,19 +532,15 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
                     singleShiftQR!(HH, τ, Z, s, istart, iend)
                 else
                     # most of the time use Francis double shifts
-                    if T <: Real
-                        debug && @printf("Francis double shift! Subdiagonal is: %10.3e, last subdiagonal is: %10.3e\n", HH[iend, iend - 1], HH[iend - 1, iend - 2])
-                    else
-                        debug && @printf("Francis double shift! Subdiagonal is: %10.3e%+10.3eim, last subdiagonal is: %10.3e%+10.3eim\n", reim(HH[iend, iend - 1])..., reim(HH[iend - 1, iend - 2])...)
-                    end
+                    @mydebug println("Francis double shift! Subdiagonal is: ",
+                                     _fmt_nr(HH[iend, iend - 1]),
+                                     " last subdiagonal is: ",
+                                     _fmt_nr(HH[iend - 1, iend - 2]))
                     doubleShiftQR!(HH, τ, Z, t, d, istart, iend)
                 end
             elseif shiftmethod == :Rayleigh
-                if T <: Real
-                    debug && @printf("Single shift with Rayleigh shift! Subdiagonal is: %10.3e\n", HH[iend, iend - 1])
-                else
-                    debug && @printf("Single shift with Rayleigh shift! Subdiagonal is: %10.3e%+10.3eim\n", reim(HH[iend, iend - 1])...)
-                end
+                @mydebug println("Single shift with Rayleigh shift! Subdiagonal is: ",
+                                 _fmt_nr(HH[iend, iend - 1]))
 
                 # Run a bulge chase
                 singleShiftQR!(HH, τ, Z, Hmm, istart, iend)
@@ -486,7 +553,7 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
                 if iend == 1
                     putw!(w,HH[iend,iend])
                 elseif iend == 2
-                    debug && println("final std. iend = $iend")
+                    @mydebug println("final std. iend = $iend")
                     H2 = HH[1:2,1:2]
                     G2,w1,w2 = _gs2x2!(H2,2)
                     putw!(w,w2)

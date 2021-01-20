@@ -1,7 +1,7 @@
 const badevs = Ref{Int}(0)
 using Printf
 
-diagnosing = Sys.iswindows()
+diagnosing = false
 const dgn = Ref(diagnosing)
 
 function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
@@ -129,6 +129,19 @@ end # type loop (non-BlasFloat)
         @test isapprox(csort(vnew),v,atol=2e-5)
     end
 end
+
+# v0.4.0 breaks on this matrix
+function _example1(T=Complex{Float32})
+    iseed = [4066,2905,502,2389]
+    ulpinv = 1 / eps(real(T))
+    A,d,ds = latme!(zeros(T,5,5),1.0,4,ulpinv,1.0,iseed=iseed)
+    return A
+end
+@testset "short QR sweep" begin
+    A = _example1(ComplexF32)
+    schurtest(A,20)
+end
+
 
 for T in [ComplexF64, ComplexF32]
 @testset "group $T" begin
