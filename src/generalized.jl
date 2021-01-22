@@ -253,7 +253,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                                 H[jch+1,jch-1] = 0
                                 # checkme G or G'?
                                 rmul!(view(H,ifirstm:jch,:),G')
-                                rmul!(view(B,ifrstm:jch+1,:),G')
+                                rmul!(view(B,ifirstm:jch+1,:),G')
                                 if wantZ
                                     rmul!(Z,G')
                                 end
