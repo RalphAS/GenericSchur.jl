@@ -39,7 +39,7 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
 end
 
 
-@testset "generalized sanity $T" for T in [ComplexF64, Complex{BigFloat}]
+@testset "generalized basic sanity $T" for T in [ComplexF64, Complex{BigFloat}]
 
 unfl = floatmin(real(T))
 ovfl = one(real(T)) / unfl
@@ -56,6 +56,37 @@ ens = [4,32]
         B = rand(T,n,n)
         gschurtest(A, B, 20)
     end
+end # testset
+
+using SparseArrays
+include("psjmats.jl")
+@testset "generalized examples from Q.M." begin
+    gschurtest(Array(psj_1_A), Array(psj_1_B), 100)
+    gschurtest(Array(psj_2_A), Array(psj_2_B), 100)
+    gschurtest(Array(psj_3_A), Array(psj_3_B), 100)
+end
+
+@testset "generalized challenging $T" for T in [ComplexF64, Complex{BigFloat}]
+    # sizes of matrices to test
+    n = 32
+    n1 = n >> 2
+    n2 = n - 2*n1
+    A0 = triu(rand(T,n,n) .- 0.5)
+    B0 = triu(rand(T,n,n) .- 0.5)
+    # stuff in some degenerate singularity
+    for j=1:n1
+        A0[j,j] = zero(T)
+    end
+    for j=n1+1:n2
+        B0[j,j] = zero(T)
+    end
+    Qa,_ = qr!(T.(randn(n,n) + 1im * randn(n,n)))
+    Qb,_ = qr!(T.(randn(n,n) + 1im * randn(n,n)))
+    A = Qa*A0*Qa'
+    B = Qb*B0*Qb'
+
+    gschurtest(A, B, 20)
+
 end # testset
 
 

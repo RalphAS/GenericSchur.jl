@@ -56,7 +56,7 @@ function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};
 
     # materializing R may waste memory; can we rely on storage in modified B?
     A, B, Q, Z = _hessenberg!(A, bqr.R, Q, Z)
-    α, β, S, Tmat, Q, Z = _gqz!(A, B, Q, Z, true)
+    α, β, S, Tmat, Q, Z = _gqz!(A, B, Q, Z, true; kwargs...)
 
     # TODO if balancing, unbalance Q, Z
 
@@ -159,8 +159,14 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     shiftcount = 0
     eshift = zero(T)
 
-    alldone = false
-    for it=1:maxiter
+    niter = 0
+    while true
+        niter += 1
+        if niter > maxiter
+            @warn "convergence failure; factorization incomplete at ilast=$ilast"
+            break
+        end
+
         # warning: _istart, ifirst, ilast are as in LAPACK, not GLA
         # note zlartg(f,g,c,s,r) -> (c,s,r) = givensAlgorithm(f,g)
 
@@ -169,73 +175,86 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         # 1: H[j,j-1] == 0 || j=ilo
         # 2: B[j,j] = 0
 
-        trivsplit = false
+        null_Btail = false # branch 50 in zhgeqz
+        deflate_H = false  # branch 60 in zhgeqz
+        ns_Bblock_found = false # branch 70 in zhgeqz
+
         if ilast == ilo
-            trivsplit = true
+            deflate_H = true
         elseif abs1(H[ilast,ilast-1]) < atol
             H[ilast, ilast-1] = 0
-            trivsplit = true
+            deflate_H = true
         end
-        # For now, we follow LAPACK too closely.
+        # For now, we follow LAPACK quite closely.
         # br is a branch indicator corresponding to goto targets
-        br = trivsplit ? :br60 : :br_none
-        if !trivsplit # 60
+        br = deflate_H ? :br60 : :br_none
+        if !deflate_H
+            # deflate_H is only tentatively false at this point
             if abs(B[ilast,ilast]) <= btol
                 B[ilast,ilast] = 0
+                null_Btail = true
                 br = :br50
             else
                 # general case
                 for j=ilast-1:-1:ilo
                     # Test 1
-                    ilazro = false
+                    split_test1 = false
                     if j==ilo
-                        ilazro = true
+                        split_test1 = true
                     else
                         if abs1(H[j,j-1]) <= atol
                             H[j,j-1] = 0
-                            ilazro = true
+                            split_test1 = true
                         end
                     end
                     # Test 2
-                    if abs(B[j,j]) < btol
+                    split_test2 = abs(B[j,j]) < btol
+                    if split_test2
                         B[j,j] = 0
                         # Test 1a: check for 2 consec. small subdiags in H
-                        ilazr2 = !ilazro &&
+                        split_test1a = !split_test1 &&
                             (abs1(H[j,j-1]) * (ascale * abs1(H[j+1,j]))
                              <= abs1(H[j,j]) * (ascale * atol))
                         # if both tests pass, split 1x1 block off top
                         # if remaining leading diagonal elt vanishes, iterate
-                        if ilazro || ilazr2
+                        if split_test1 || split_test1a
+                            @mydebug println("splitting 1x1 at top (j=$j)")
                             for jch=j:ilast-1
                                 G,r = givens(H[jch,jch],H[jch+1,jch],jch,jch+1)
                                 H[jch,jch] = r
                                 H[jch+1,jch] = 0
-                                lmul!(G,view(H,jch:ihi,jch+1:ilastm))
-                                lmul!(G,view(B,jch:ihi,jch+1:ilastm))
+                                lmul!(G,view(H,:,jch+1:ilastm))
+                                lmul!(G,view(B,:,jch+1:ilastm))
                                 if wantQ
                                     rmul!(Q, G')
                                 end
-                                if ilazr2
-                                    H[jch,jch-1] *= c
+                                if split_test1a
+                                    H[jch,jch-1] *= G.c
                                 end
-                                ilazr2 = false
+                                split_test1a = false
                                 if abs1(B[jch+1, jch+1]) > btol
                                     if jch+1 >= ilast
+                                        deflate_H = true
                                         br = :br60
                                         break
                                     else
                                         ifirst = jch+1
+                                        ns_Bblock_found = true
                                         br = :br70
                                         break
                                     end
                                 end
                                 B[jch+1, jch+1] = 0
                             end # jch loop
-                            br = :br50
+                            if !ns_Bblock_found && !deflate_H
+                                null_Btail = true
+                                br = :br50
+                            end
                             break
                         else
                             # only test 2 passed: chase 0 to B[ilast,ilast]
                             # then process as above
+                            @mydebug println("chasing diag 0 in B from $j to $ilast")
                             for jch=j:ilast-1
                                 G,r = givens(B[jch,jch+1],B[jch+1,jch+1],
                                              jch,jch+1)
@@ -246,46 +265,52 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                                 end
                                 lmul!(G,view(H,:,jch-1:ilastm))
                                 if wantQ
-                                    rmul!(Q,G)
+                                    rmul!(Q,G')
                                 end
-                                G,r = givens(H[jch+1,jch],H[jch+1,jch-1],
+                                G,r = givens(conj(H[jch+1,jch]),conj(H[jch+1,jch-1]),
                                              jch,jch-1)
+                                H[jch+1,jch] = r'
                                 H[jch+1,jch-1] = 0
-                                # checkme G or G'?
                                 rmul!(view(H,ifirstm:jch,:),G')
                                 rmul!(view(B,ifirstm:jch+1,:),G')
                                 if wantZ
                                     rmul!(Z,G')
                                 end
                             end # jch loop
-                        end # if ilazro || ilazr2
-                    elseif ilazro # not tiny B[j,j]
+                            null_Btail = true
+                            br = :br50
+                        end # if split_test1 || split_test1a
+                    elseif split_test1 # but not split_test2, i.e. tiny B[j,j]
                         ifirst = j
+                        ns_Bblock_found = true
                         br = :br70
                         break
                     end # if B[j,j] tiny
                     # neither test passed; try next j
-                end # j loop (40)
+                end # j loop
+                @mydebug println("after j loop branch $br")
                 if br == :br_none
                     error("dev error: drop-through assumed impossible")
                 end
-            end # if B[ilast,ilast] tiny
-            if br == :br50
-                # B[ilast,ilast] = 0; clear H[ilast,ilast-1] to split
-                G,r = givens(H[ilast,ilast],H[ilast,ilast-1],ilast,ilast-1)
-                H[ilast,ilast] = r
+            end # B[ilast,ilast] is/is-not tiny branches
+            if null_Btail # br == :br50
+                # B[ilast,ilast] is 0; clear H[ilast,ilast-1] to split
+                G,r = givens(conj(H[ilast,ilast]),conj(H[ilast,ilast-1]),ilast,ilast-1)
+                H[ilast,ilast] = r'
                 H[ilast,ilast-1] = 0
-                rmul!(view(H,ifrstm:ilast-1,:),G')
-                rmul!(view(B,ifrstm:ilast-1,:),G')
+                rmul!(view(H,ifirstm:ilast-1,:),G')
+                rmul!(view(B,ifirstm:ilast-1,:),G')
                 if wantZ
                     rmul!(Z,G')
                 end
+                deflate_H = true
                 br = :br60
             end
-        end # if !trivsplit
-        if br == :br60
+        end # if trivial split
+        if deflate_H
             # H[ilast, ilast-1] == 0: standardize B, set α,β
             absb = abs(B[ilast,ilast])
+            @mydebug println("deflation ilast=$ilast, |B_tail|=$absb")
             if absb > safmin
                 signbc = conj(B[ilast,ilast] / absb)
                 B[ilast,ilast] = absb
@@ -305,7 +330,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
             β[ilast] = B[ilast,ilast]
             ilast -= 1
             if ilast < ilo
-                br = :br190
+                # we are done; exit outer loop
                 break
             end
             shiftcount = 0
@@ -317,9 +342,9 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                 end
             end
             continue # iteration loop
-        end # br == :br60
+        end # deflation branch
 
-        @assert br == :br70
+        @assert ns_Bblock_found
 
         # QZ step
         # This iteration involves block ifirst:ilast, assumed nonempty
@@ -348,10 +373,23 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
             rtdisc = sqrt(t1^2 + ad12 * ad21 - ad11 * ad22)
             t2 = real(t1 - abi22) * real(rtdisc) + imag(t1-abi22) * imag(rtdisc)
             shift =  (t2 <= 0) ? (t1 + rtdisc) : (t1 - rtdisc)
+            if isnan(shift)
+                shift = zero(T)
+                @warn "logic error in generalized Schur, check results"
+                @mydebug println("NaN encountered bscale=$bscale " *
+                                 "b11=$(B[ilast-1,ilast-1]) " *
+                                 "b22=$(B[ilast,ilast])")
+            end
         else
             # exceptional shift
             # "Chosen for no particularly good reason" (LAPACK)
             eshift += (ascale * H[ilast, ilast-1]) / (bscale * B[ilast-1, ilast-1])
+            if isnan(eshift)
+                @warn "logic error in generalized Schur, check results"
+                @mydebug println("NaN encountered bscale=$bscale " *
+                                 "b11=$(B[ilast-1,ilast-1]) ")
+                eshift = zero(T)
+            end
             shift = eshift
         end
 
@@ -380,6 +418,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         end
 
         # qz sweep
+        @mydebug println("QZ sweep range $(_istart):$ilast shift=$shift")
         g2 = ascale*H[_istart+1, _istart]
         c,s,t3 = givensAlgorithm(f1, g2)
         for j=_istart:ilast-1
@@ -404,12 +443,8 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                 rmul!(Z, G)
             end
         end
-        if it >= maxiter
-            @warn "convergence failure; factorization incomplete"
-            break
-        end
     end # iteration loop
-
+    @mydebug println("ggschur! done in $niter iters")
     # TODO if ilo > 1, deal with 1:ilo-1
 
     return α, β, H, B, Q, Z
