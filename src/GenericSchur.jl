@@ -861,6 +861,7 @@ include("sylvester.jl")
 include("generalized.jl")
 include("gsylvester.jl")
 
+include("rordschur.jl")
 include("ordschur.jl")
 include("gcondition.jl")
 
