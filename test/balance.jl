@@ -51,6 +51,14 @@ end
     ru = maximum([abs(fu.values[j]-λ[j]) for j in 1:3])
     rb = maximum([abs(fb.values[j]-λ[j]) for j in 1:3])
     @test ru > 100rb
+
+    if T <: Complex
+        Abal,  B = balance!(copy(A))
+        sb = schur(Abal)
+        Vl = eigvecs(sb, left=true)
+        ldiv!(B, Vl)
+        @test A' * Vl ≈ Vl * diagm(0 => conj.(sb.values))
+    end
 end
 
 # This is a convenient place for other checks of the simple wrapper.

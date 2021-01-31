@@ -1,7 +1,107 @@
-# copied from Andreas Noack's GenericLinearAlgebra.jl, with trivial mods
-
 import Base: *, eltype, size
 import LinearAlgebra: adjoint, mul!, rmul!
+
+# The reflector! code in stdlib has no underflow or accuracy protection
+
+# These are translations of xLARFG from LAPACK
+# LAPACK Copyright:
+# Univ. of Tennessee
+# Univ. of California Berkeley
+# Univ. of Colorado Denver
+# NAG Ltd.
+function _reflector!(x::AbstractVector{T}) where {T<:Real}
+    Base.require_one_based_indexing(x)
+    n = length(x)
+    n <= 1 && return zero(T)
+    sfmin = 2floatmin(T) / eps(T)
+    @inbounds begin
+        α = x[1]
+        xnorm = _norm2(view(x,2:n))
+        if iszero(xnorm)
+            return zero(T)
+        end
+        β = -copysign(hypot(α, xnorm), α)
+        kount = 0
+        smallβ = abs(β) < sfmin
+        if smallβ
+            # recompute xnorm and β if needed for accuracy
+            rsfmin = one(T) / sfmin
+            while smallβ
+                kount += 1
+                for j in 2:n
+                    x[j] *= rsfmin
+                end
+                β *= rsfmin
+                α *= rsfmin
+                # CHECKME: is 20 adequate for BigFloat?
+                smallβ = (abs(β) < sfmin) && (kount < 20)
+            end
+            # now β ∈ [sfmin,1]
+            xnorm = _norm2(view(x,2:n))
+            β = -copysign(hypot(α, xnorm), α)
+        end
+        τ = (β - α) / β
+        t = one(T) / (α - β)
+        for j in 2:n
+            x[j] *= t
+        end
+        for j in 1:kount
+            β *= sfmin
+        end
+        x[1] = β
+    end
+    return τ
+end
+
+function _reflector!(x::AbstractVector{T}) where {T<:Complex}
+    Base.require_one_based_indexing(x)
+    n = length(x)
+    # we need to make subdiagonals real so the n=1 case is nontrivial for complex eltype
+    n < 1 && return zero(T)
+    RT = real(T)
+    sfmin = floatmin(RT) / eps(RT)
+    @inbounds begin
+        α = x[1]
+        αr, αi = reim(α)
+        xnorm = _norm2(view(x,2:n))
+        if iszero(xnorm) && iszero(αi)
+            return zero(T)
+        end
+        β = -copysign(_hypot3(αr, αi, xnorm), αr)
+        kount = 0
+        smallβ = abs(β) < sfmin
+        if smallβ
+            # recompute xnorm and β if needed for accuracy
+            rsfmin = one(real(T)) / sfmin
+            while smallβ
+                kount += 1
+                for j in 2:n
+                    x[j] *= rsfmin
+                end
+                β *= rsfmin
+                αr *= rsfmin
+                αi *= rsfmin
+                smallβ = (abs(β) < sfmin) && (kount < 20)
+            end
+            # now β ∈ [sfmin,1]
+            xnorm = _norm2(view(x,2:n))
+            α = complex(αr, αi)
+            β = -copysign(_hypot3(αr, αi, xnorm), αr)
+        end
+        τ = complex((β - αr) / β, -αi / β)
+        t = one(T) / (α - β)
+        for j in 2:n
+            x[j] *= t
+        end
+        for j in 1:kount
+            β *= sfmin
+        end
+        x[1] = β
+    end
+    return τ
+end
+
+# copied from Andreas Noack's GenericLinearAlgebra.jl, with trivial mods
 
 """
 a Householder reflection represented as the essential part of the
@@ -11,20 +111,14 @@ struct Householder{T,S<:StridedVector}
     v::S
     τ::T
 end
-struct HouseholderBlock{T,S<:StridedMatrix,U<:StridedMatrix}
-    V::S
-    T::UpperTriangular{T,U}
-end
 
 # warning; size -> length(v) in GLA, but this makes more sense to us:
 size(H::Householder) = (length(H.v)+1, length(H.v)+1)
 size(H::Householder, i::Integer) = i <= 2 ? length(H.v)+1 : 1
 
 eltype(H::Householder{T})      where T = T
-eltype(H::HouseholderBlock{T}) where T = T
 
 adjoint(H::Householder{T})      where {T} = Adjoint{T,typeof(H)}(H)
-adjoint(H::HouseholderBlock{T}) where {T} = Adjoint{T,typeof(H)}(H)
 
 function lmul!(H::Householder, A::StridedMatrix)
     m, n = size(A)
@@ -72,82 +166,6 @@ function lmul!(adjH::Adjoint{<:Any,<:Householder}, A::StridedMatrix)
     end
     A
 end
-
-# FixMe! This is a weird multiplication method and at least its behavior needs to be explained
-function lmul!(H::HouseholderBlock{T}, A::StridedMatrix{T}, M::StridedMatrix{T}) where T
-    V = H.V
-    mA, nA = size(A)
-    nH = size(V, 1)
-    blocksize = min(nH, size(V, 2))
-    nH == mA || throw(DimensionMismatch(""))
-
-    # Reflector block is split into a UnitLowerTriangular top part and rectangular lower part
-    V1 = LinearAlgebra.UnitLowerTriangular(view(V, 1:blocksize, 1:blocksize))
-    V2 = view(V, blocksize+1:mA, 1:blocksize)
-
-    # Split A to match the split in the reflector block
-    A1 = view(A, 1:blocksize, 1:nA)
-    A2 = view(A, blocksize+1:mA, 1:nA)
-
-    # Copy top part of A (A1) to temporary work space
-    copyto!(M, A1)
-    # Multiply UnitLowerTriangular V1 and A1 in-place in M (M = V1'A1)
-    lmul!(V1', M)
-    # Add V2'A2 to V1'A1 (M := M + V2'A2)
-    mul!(M, V2', A2, one(T), one(T))
-    # Multiply the elementary block loading T (UpperTriangular) and M in-place
-    lmul!(H.T, M)
-
-    # A2 := A2 - V2*M
-    mul!(A2, V2, M, -one(T), one(T))
-    # A1 := A1 - V1*M but since V1 is UnitLowerTriangular we do it in two steps:
-    ## 1. M  := -V1*M
-    ## 2. A1 := A1 + M
-    lmul!(V1, M, -one(T))
-    axpy!(one(T), M, A1)
-
-    return A
-end
-(*)(H::HouseholderBlock{T}, A::StridedMatrix{T}) where {T} =
-        lmul!(H, copy(A), similar(A, (min(size(H.V)...), size(A, 2))))
-
-function lmul!(adjH::Adjoint{T,<:HouseholderBlock{T}}, A::StridedMatrix{T}, M::StridedMatrix) where T
-    H = parent(adjH)
-    V = H.V
-    mA, nA = size(A)
-    nH = size(V, 1)
-    blocksize = min(nH, size(V, 2))
-    nH == mA || throw(DimensionMismatch(""))
-
-    # Reflector block is split into a UnitLowerTriangular top part and rectangular lower part
-    V1 = LinearAlgebra.UnitLowerTriangular(view(V, 1:blocksize, 1:blocksize))
-    V2 = view(V, blocksize+1:mA, 1:blocksize)
-
-    # Split A to match the split in the reflector block
-    A1 = view(A, 1:blocksize, 1:nA)
-    A2 = view(A, blocksize+1:mA, 1:nA)
-
-    # Copy top part of A (A1) to temporary work space
-    copyto!(M, A1)
-    # Multiply UnitLowerTriangular V1 and A1 in-place in M (M = V1'A1)
-    lmul!(V1', M)
-    # Add V2'A2 to V1'A1 (M := M + V2'A2)
-    mul!(M, V2', A2, one(T), one(T))
-    # Multiply the elementary block loading T (UpperTriangular) and M in-place
-    lmul!(H.T', M)
-
-    # A2 := A2 - V2*M
-    mul!(A2, V2, M, -one(T), one(T))
-    # A1 := A1 - V1*M but since V1 is UnitLowerTriangular we do it in two steps:
-    ## 1. M  := -V1*M
-    ## 2. A1 := A1 + M
-    lmul!(V1, M, -one(T))
-    axpy!(one(T), M, A1)
-
-    return A
-end
-(*)(adjH::Adjoint{T,<:HouseholderBlock{T}}, A::StridedMatrix{T}) where {T} =
-        lmul!(adjH, copy(A), similar(A, (min(size(parent(adjH).V)...), size(A, 2))))
 
 Base.convert(::Type{Matrix}, H::Householder{T}) where {T} = lmul!(H, Matrix{T}(I, size(H, 1), size(H, 1)))
 Base.convert(::Type{Matrix{T}}, H::Householder{T}) where {T} = lmul!(H, Matrix{T}(I, size(H, 1), size(H, 1)))

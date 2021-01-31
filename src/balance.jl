@@ -51,7 +51,7 @@ function balance!(A::AbstractMatrix{T}; scale=true, permute=true,
         # look for row permutations which make the lower portion UT
         ihi = n+1
         js = 0
-        while ihi > 1
+        @inbounds while ihi > 1
             ihi -= 1
             exch = false
             ms = 0
@@ -86,7 +86,7 @@ function balance!(A::AbstractMatrix{T}; scale=true, permute=true,
         end
         # look for column permutations which make the left portion UT
         ilo = 0
-        while ilo < n
+        @inbounds while ilo < n
             ilo += 1
             exch = false
             ms = 0
@@ -134,8 +134,6 @@ function balance!(A::AbstractMatrix{T}; scale=true, permute=true,
                     # LAPACK mixes norms
                     c = norm(view(A,ilo:ihi,i),2)
                     r = norm(view(A,i,ilo:ihi),2)
-#                    c = cxnorm(A,ilo,ihi,i,p)
-#                    r = rxnorm(A,ilo,ihi,i,p)
                 else
                     c = norm(view(A,ilo:ihi,i),p)
                     r = norm(view(A,i,ilo:ihi),p)
@@ -233,7 +231,7 @@ function ldiv!(B::Balancer, A::StridedMatrix{T}) where T
     end
     ilo, ihi = B.ilo, B.ihi
     if ilo != ihi
-        rmul!(A, Diagonal(one(T) ./ B.D))
+        lmul!(Diagonal(one(T) ./ B.D), A)
     end
     for j=ilo-1:-1:1
         m = B.prow[j]
@@ -254,43 +252,4 @@ function ldiv!(B::Balancer, A::StridedMatrix{T}) where T
         end
     end
     A
-end
-
-# James et al. claim Parlet & Reinsch advocate skipping diagonal elts
-# but this is (no longer?) in LAPACK
-function cxnorm(A::AbstractMatrix{T},i0,i1,i,p) where T
-    RT = real(T)
-        s = zero(RT)
-        for j=i0:i1
-            if j==i
-                continue
-            end
-            if p == 1
-                s += abs(A[j,i])
-            else
-                s += A[j,i]' * A[j,i]
-            end
-        end
-        if p == 2
-            s = sqrt(s)
-        end
-        return s
-end
-function rxnorm(A::AbstractMatrix{T},i0,i1,i,p) where T
-    RT = real(T)
-        s = zero(RT)
-        for j=i0:i1
-            if j==i
-                continue
-            end
-            if p == 1
-                s += abs(A[i,j])
-            else
-                s += A[i,j]' * A[i,j]
-            end
-        end
-        if p == 2
-            s = sqrt(s)
-        end
-        return s
 end

@@ -28,7 +28,8 @@ function godunov(T)
                     -287 -16 1712 -128 1968 -30 2032;
                     -2176 -287 -1565 -512 -541 -1152 -289])
     vals = [-4,-2,-1,0,1,2,4]
-    A,vals
+    econd = 7e16 # condition of the worst ones
+    A,vals,econd
 end
 
 include("balance.jl")
@@ -39,5 +40,7 @@ include("ordschur.jl")
 
 include("generalized.jl")
 include("gordschur.jl")
+
+include("errors.jl")
 
 end # module

@@ -71,6 +71,25 @@ function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
     end
 end
 
+function hesstest(A::Matrix{T}, tol) where {T<:Complex}
+    n = size(A,1)
+    ulp = eps(real(T))
+    H = invoke(GenericSchur._hessenberg!,
+               Tuple{StridedMatrix{T},} where T,
+               copy(A))
+    Q = GenericSchur._materializeQ(H)
+    # test 1: H.H is upper triangular
+    @test all(tril(H.H,-2) .== 0)
+    # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
+    decomp_err = norm(A - Q * H.H * Q') / (n * norm(A) * ulp)
+    @test decomp_err < tol
+    # test 3: S.Z is orthogonal: norm(I - S.Z * S.Z') / (n * ulp) < tol
+    orth_err = norm(I - Q * Q') / (n * ulp)
+    @test orth_err < tol
+    # test 4: subdiagonal is real
+    @test all(isreal.(diag(H.H,-1)))
+end
+
 
 """
 generate a random unitary matrix
@@ -80,7 +99,7 @@ Unitary matrices are normal, so Schur decomposition is diagonal for them.
 (This is not only another test, but sometimes actually useful.)
 """
 function randu(::Type{T},n) where {T<:Complex}
-    if T ∈ [Float16,Float32,Float64]
+    if real(T) ∈ [Float16,Float32,Float64]
         A = randn(T,n,n)
         F = qr(A)
         return Matrix(F.Q)
@@ -94,8 +113,17 @@ end
 
 Random.seed!(1234)
 
-for T in [Complex{BigFloat},Complex{Float16}]
-@testset "group $T" begin
+@testset "Hessenberg $T" for T in [ComplexF64, Complex{Float16}]
+    n = 32
+    tol = 10
+    A = rand(T,n,n)
+    hesstest(A, tol)
+    s = 100 * floatmin(real(T))
+    Asmall = s * A
+    hesstest(Asmall, tol)
+end
+
+@testset "group $T" for T in [Complex{BigFloat},Complex{Float16}]
 unfl = floatmin(real(T))
 ovfl = one(real(T)) / unfl
 ulp = eps(real(T))
@@ -113,20 +141,24 @@ end
 @testset "random unitary" begin
     for n in ens
         A = randu(T,n)
-        schurtest(A,10,normal=true)
+        schurtest(A,20,normal=true)
     end
 end
 
 end # group testset
-end # type loop (non-BlasFloat)
 
 @testset "Godunov (complex)" begin
+    # Set precision fine enough for eigval condition to apply,
+    # but not fine enough to make it a slam-dunk.
     setprecision(BigFloat, 80) do
-        A,v = godunov(Complex{BigFloat})
+        A,v,econd = godunov(Complex{BigFloat})
         S = schur(A)
-        @test isapprox(csort(S.values),v,atol=2e-5)
+        δ = norm(S.Z*S.T*S.Z'-A)
+        @test δ < 100 * eps(big(1.0)) * norm(A)
+        t = 3*δ*econd
+        @test isapprox(csort(S.values),v,atol=t)
         vnew = eigvals(A)
-        @test isapprox(csort(vnew),v,atol=2e-5)
+        @test isapprox(csort(vnew),v,atol=t)
     end
 end
 
@@ -142,9 +174,7 @@ end
     schurtest(A,20)
 end
 
-
-for T in [ComplexF64, ComplexF32]
-@testset "group $T" begin
+@testset "group $T" for T in [ComplexF64, ComplexF32]
 
 unfl = floatmin(real(T))
 ovfl = one(real(T)) / unfl
@@ -338,4 +368,3 @@ end
 end
 
 end # group testset
-end # type loop (BlasFloat)

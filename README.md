@@ -75,9 +75,6 @@ By default, the result is in standard form, so
 pair-blocks (and therefore rank-2 invariant subspaces) should be fully resolved.
 (This differs from the original version in GenericLinearAlgebra.jl.)
 
-If the optional keyword `standardized` is set to `false` in `gschur`, a
-non-standard (but less expensive) form is produced.
-
 Eigenvectors are not currently available for the "real Schur" forms.
 But don't despair; one can convert a standard quasi-triangular real `Schur`
 into a complex `Schur` with the `triangularize` function provided here.

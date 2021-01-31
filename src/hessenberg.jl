@@ -6,16 +6,13 @@ if VERSION < v"1.3"
         τ::Vector{U}
     end
     Base.size(H::HessenbergFactorization, args...) = size(H.data, args...)
-end
-
-if VERSION < v"1.3"
 
     function _hessenberg!(A::StridedMatrix{T}) where T
         n = LinearAlgebra.checksquare(A)
         τ = Vector{Householder{T}}(undef, n - 1)
         for i = 1:n - 1
             xi = view(A, i + 1:n, i)
-            t  = LinearAlgebra.reflector!(xi)
+            t  = _reflector!(xi)
             H  = Householder{T,typeof(xi)}(view(xi, 2:n - i), t)
             τ[i] = H
             lmul!(H', view(A, i + 1:n, i + 1:n))
@@ -40,14 +37,15 @@ function _hessenberg!(A::StridedMatrix{T}) where T
     τ = Vector{T}(undef, n - 1)
     for i = 1:n - 1
         xi = view(A, i + 1:n, i)
-        t  = LinearAlgebra.reflector!(xi)
-        H  = Householder{T,typeof(xi)}(view(xi, 2:n - i), t)
+        t  = _reflector!(xi)
+        H  = Householder{T,typeof(xi)}(view(A, i+2:n, i), t)
         τ[i] = H.τ
         lmul!(H', view(A, i + 1:n, i + 1:n))
         rmul!(view(A, :, i + 1:n), H)
     end
     return Hessenberg(A, τ)
 end
+
 using LinearAlgebra: QRPackedQ
 function _materializeQ(H::Hessenberg{T}) where {T}
     A = copy(H.Q.factors)

@@ -97,19 +97,6 @@ function rankUpdate!(α::Number, x::StridedVector, y::StridedVector, A::StridedM
     end
 end
 
-# completely unsafe upper triangular solve
-# NB: works with leading n×n block of A and leading n terms of b, x
-function _usolve0!(A::StridedMatrix{T}, n, x, cnorm) where {T}
-    @inbounds for j in n:-1:1
-        xj = x[j] = A[j,j] \ x[j]
-        for i in j-1:-1:1
-            x[i] -= A[i,j] * xj
-        end
-    end
-    # for future compatibility: overflow-safe version would return scale
-    one(real(T))
-end
-
 # index-unsafe upper triangular solve
 # with scaling to prevent overflow
 # Actually solves A[1:n,1:n] * x = s * b and returns s, a scaling factor
@@ -434,4 +421,71 @@ function _ssq(x::AbstractVector{T}, scale, sumsq) where {T}
         end
     end
     return scale, sumsq
+end
+
+# stdlib norm2 uses a poorly implemented generic scheme for short vectors.
+function _norm2(x::AbstractVector{T}) where {T<:Real}
+    Base.require_one_based_indexing(x)
+    n = length(x)
+    n < 1 && return zero(T)
+    n == 1 && return abs(x[1])
+    scale = zero(T)
+    ssq = zero(T)
+    for xi in x
+        if !iszero(xi)
+            a = abs(xi)
+            if scale < a
+                ssq = one(T) + ssq * (scale / a)^2
+                scale = a
+            else
+                ssq += (a / scale)^2
+            end
+        end
+    end
+    return scale * sqrt(ssq)
+end
+
+function _norm2(x::AbstractVector{T}) where {T<:Complex}
+    Base.require_one_based_indexing(x)
+    n = length(x)
+    RT = real(T)
+    n < 1 && return zero(RT)
+    n == 1 && return abs(x[1])
+    scale = zero(RT)
+    ssq = zero(RT)
+    for xx in x
+        xr,xi = reim(xx)
+        if !iszero(xr)
+            a = abs(xr)
+            if scale < a
+                ssq = one(RT) + ssq * (scale / a)^2
+                scale = a
+            else
+                ssq += (a / scale)^2
+            end
+        end
+        if !iszero(xi)
+            a = abs(xi)
+            if scale < a
+                ssq = one(RT) + ssq * (scale / a)^2
+                scale = a
+            else
+                ssq += (a / scale)^2
+            end
+        end
+    end
+    return scale * sqrt(ssq)
+end
+
+# As of v1.5, Julia hypot() w/ >2 args is unprotected (the documentation lies),
+# so we need this.
+# translation of dlapy3, assuming NaN propagation
+function _hypot3(x::T, y::T, z::T) where {T}
+    xa = abs(x)
+    ya = abs(y)
+    za = abs(z)
+    w = max(xa, ya, za)
+    rw = one(real(T)) / w
+    r::real(T) = w * sqrt((rw * xa)^2 + (rw * ya)^2 + (rw * za)^2)
+    return r
 end

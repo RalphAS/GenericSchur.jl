@@ -133,14 +133,21 @@ include("balance.jl")
 # Univ. of California Berkeley
 # Univ. of Colorado Denver
 # NAG Ltd.
-function _gschur!(H::HessenbergArg{T}, Z=nothing;
-                 maxiter = 100*size(H, 1), maxinner = 30*size(H, 1), kwargs...
+function gschur!(H::HessenbergArg{T}, Z=nothing;
+                  maxiter = 100*size(H, 1), maxinner = 30*size(H, 1),
+                  checksd=true, kwargs...
                  ) where {T <: Complex}
     n = size(H, 1)
     istart = 1
     iend = n
     w = Vector{T}(undef, n)
     HH = _getdata(H)
+
+    if checksd
+        for j in 1:n-1
+            isreal(HH[j+1,j]) || throw(ArgumentError("algorithm assumes real subdiagonal"))
+        end
+    end
 
     RT = real(T)
     ulp = eps(RT)
@@ -242,8 +249,6 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
             end # shift selection
 
             # run a QR iteration
-            @mydebug println("block range $(istart):$(iend) shift ", _fmt_nr(t))
-
             # following zlahqr, only use single-shift
             singleShiftQR!(HH, Z, t, istart, iend)
 
@@ -277,9 +282,9 @@ function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
     H = _hessenberg!(A)
     if wantZ
         Z = _materializeQ(H)
-        S = _gschur!(H, Z; kwargs...)
+        S = gschur!(H, Z; checksd=false, kwargs...)
     else
-        S = _gschur!(H; kwargs...)
+        S = gschur!(H; checksd=false, kwargs...)
     end
     if scaleA
         safescale!(S.T, cscale, anrm)
@@ -293,8 +298,14 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
     ulp = eps(real(eltype(HH)))
 
     @mydebug Hsave = Z*HH*Z'
-    function dcheck(str)
-        print(str," decomp err ", norm(Hsave - Z*HH*Z'))
+    @mydebug function dcheck(str)
+        de = norm(Hsave - Z*HH*Z')
+        if de > 1e-6
+            println()
+            @warn "$str decomp err $de"
+        else
+            print(str," decomp err ", de)
+        end
     end
 
     # key:
@@ -339,6 +350,8 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
         v .= (h11s,T(h21))
       end
     end
+    @mydebug println("QR sweep $(istart1):$(iend) shift ", _fmt_nr(shift),
+                     " subdiag ", _fmt_nr(HH[iend,iend-1]))
 
     @inbounds for k = istart1:iend-1
         if k > istart1
@@ -347,7 +360,8 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
         # else
         #    use v from above to create a bulge
         end
-        τ1 = LinearAlgebra.reflector!(v)
+        τ1 = _reflector!(v)
+        # τ1 = LinearAlgebra.reflector!(v)
         if k > istart1
             HH[k,k-1] = v[1]
             HH[k+1,k-1] = zero(T)
@@ -378,7 +392,7 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
             # If the QR step started at a row below istart because two consecutive
             # small subdiagonals were found, extra scaling must be performed
             # to ensure reality of HH[istart1,istart1-1]
-            t = 1 - τ1
+            t = one(T) - τ1
             t /= abs(t)
             HH[istart1+1,istart1] *= t'
             if istart1 + 2 <= iend
@@ -414,22 +428,33 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
         end
       end
     end
-    @mydebug dcheck(" QR post")
+#    @mydebug dcheck(" QR post")
     @mydebug println()
     return HH
 end
 
-const _STANDARDIZE_DEFAULT = true
+# based on LAPACK dlahqr
+"""
+gschur!(H::Hessenberg, Z) -> F::Schur
 
-# Mostly copied from GenericLinearAlgebra
-function _gschur!(H::HessenbergArg{T}, Z=nothing;
-                  tol = eps(real(T)), shiftmethod = :Francis,
-                  maxiter = 100*size(H, 1), standardize = _STANDARDIZE_DEFAULT,
+Compute the Schur decomposition of a Hessenberg matrix.  Subdiagonals of `H` must be real.
+If `Z` is provided, it is updated with the unitary transformations of the decomposition.
+"""
+function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
+                  tol = eps(real(T)),
+                  maxiter = 100*size(H, 1), standardize = nothing,
                   kwargs...) where {T <: Real}
+    if !(standardize === nothing)
+        @warn "obsolete keyword `standardize` in gschur!" maxlog=1
+    end
     n = size(H, 1)
+    if !(Z === nothing)
+        size(Z, 2) == n || throw(DimensionMismatch("second dimension of Z must match H"))
+    end
     istart = 1
     iend = n
     HH = _getdata(H)
+    triu!(HH,-1)
     τ = Rotation(Givens{T}[])
     w = Vector{Complex{T}}(undef, n)
     iwcur = n
@@ -438,143 +463,162 @@ function _gschur!(H::HessenbergArg{T}, Z=nothing;
         iwcur -= 1
     end
 
+    smallnum = floatmin(T) * (n / eps(T))
+    threeq = 3 / T(4)
+    m7_16 = -7 / T(16)
+
     # iteration count
-    i = 0
+    iter = 0
 
-    @inbounds while true
-        i += 1
-        if i > maxiter
-            throw(ArgumentError("iteration limit $maxiter reached"))
-        end
-
-        # Determine if the matrix splits. Find lowest positioned subdiagonal "zero"
-        for _istart in iend - 1:-1:1
-            if abs(HH[_istart + 1, _istart]) < tol*(abs(HH[_istart, _istart]) + abs(HH[_istart + 1, _istart + 1]))
-                    istart = _istart + 1
-                @mydebug println("Split1! at $istart, subdiagonal element is ",
-                                 _fmt_nr(HH[istart, istart-1]))
-                standardize && (HH[istart, istart-1] = 0) # clean
-                break
-            elseif _istart > 1 && abs(HH[_istart, _istart - 1]) < tol*(abs(HH[_istart - 1, _istart - 1]) + abs(HH[_istart, _istart]))
-                istart = _istart
-                @mydebug println("Split2! at $istart, subdiagonal element is ",
-                                 _fmt_nr(HH[_istart, _istart-1]))
-                break
+    # Main loop.
+    @inbounds while iend >= 1
+        # eigenvalues in diagonal entries iend+1:n have converged.
+        istart = 1
+        iterqr = 0
+        deflate = false
+        while true
+            iter += 1
+            if iter > maxiter
+                throw(ArgumentError("iteration limit $maxiter reached"))
             end
-            istart = 1
-        end
 
-        # if block size is one we deflate
-        if istart >= iend
+            # istart => L
+            # iend => I
 
-            standardize && putw!(w,HH[iend,iend])
-            iend -= 1
-            @mydebug println("Bottom deflation! Block size is one. New iend is $iend")
-        # and the same for a 2x2 block
-        elseif istart + 1 == iend
-            @mydebug println("Bottom deflation! Block size is two. New iend is $(iend-2)")
-
-            if standardize
-                H2 = HH[iend-1:iend,iend-1:iend]
-                G2,w1,w2 = _gs2x2!(H2,iend)
-                putw!(w,w2)
-                putw!(w,w1)
-                lmul!(G2,view(HH,:,istart:n))
-                rmul!(view(HH,1:iend,:),G2')
-                HH[iend-1:iend,iend-1:iend] .= H2 # clean
-                if iend > 2
-                    HH[iend-1,iend-2] = 0
-#                    HH[iend-2,iend-1] = 0
-                end
-                Z === nothing || rmul!(Z,G2')
-            end
-            iend -= 2
-
-        # run a QR iteration
-        # shift method is specified with shiftmethod kw argument
-        else
-            Hmm = HH[iend, iend]
-            Hm1m1 = HH[iend - 1, iend - 1]
-            if iszero(i % 10)
-                # Use Eispack exceptional shift
-                β = abs(HH[iend, iend - 1]) + abs(HH[iend - 1, iend - 2])
-                d = (Hmm + β)^2 - Hmm*β/2
-                t = 2*Hmm + 3*β/2
-            else
-                d = Hm1m1*Hmm - HH[iend, iend - 1]*HH[iend - 1, iend]
-                t = Hm1m1 + Hmm
-            end
-            # t = iszero(t) ? eps(real(one(t))) : t # introduce a small pertubation for zero shifts
-            @mydebug println("block range: $(istart):$(iend) d: ", _fmt_nr(d),
-                             " t: ", _fmt_nr(t))
-
-            if shiftmethod == :Francis
-                # Run a bulge chase
-                if iszero(i % 10)
-                    # Vary the shift strategy to avoid dead locks
-                    # We use a Wilkinson-like shift as suggested in "Sandia technical report 96-0913J: How the QR algorithm fails to converge and how fix it".
-
-                    @mydebug println("Wilkinson-like shift! Subdiagonal is: ",
-                                     _fmt_nr(HH[iend, iend - 1]),
-                                     " last subdiagonal is: ",
-                                     _fmt_nr(HH[iend-1, iend-2]))
-                    _d = t*t - 4d
-
-                    if _d isa Real && _d >= 0
-                        # real eigenvalues
-                        a = t/2
-                        b = sqrt(_d)/2
-                        s = a > Hmm ? a - b : a + b
-                    else
-                        # complex case
-                        s = t/2
-                    end
-                    singleShiftQR!(HH, τ, Z, s, istart, iend)
+            # Determine if the matrix splits.
+            split = false
+            for k in iend:-1:istart+1
+                if abs(HH[k, k-1]) < smallnum
+                    split = true
                 else
-                    # most of the time use Francis double shifts
-                    @mydebug println("Francis double shift! Subdiagonal is: ",
-                                     _fmt_nr(HH[iend, iend - 1]),
-                                     " last subdiagonal is: ",
-                                     _fmt_nr(HH[iend - 1, iend - 2]))
-                    doubleShiftQR!(HH, τ, Z, t, d, istart, iend)
+                    Hkk = HH[k, k]
+                    Hkm1km1 = HH[k-1, k-1]
+                    t = abs(Hkm1km1) + abs(Hkk)
+                    if t == 0
+                        if k > 2
+                            t += abs(HH[k-1, k-2])
+                        end
+                        if k+1 <= n
+                            t += abs(HH[k+1, k])
+                        end
+                    end
+                    # conservative deflation criterion from Ahues & Tisseur
+                    aHkkm1 = abs(HH[k, k-1])
+                    if aHkkm1 <= t * eps(T)
+                        aHkm1k = abs(HH[k-1, k])
+                        ab = max(aHkkm1, aHkm1k)
+                        ba = min(aHkkm1, aHkm1k)
+                        aa = max(abs(Hkk), abs(Hkm1km1 - Hkk))
+                        bb = min(abs(Hkk), abs(Hkm1km1 - Hkk))
+                        s = aa + bb
+                        if ba * (ab/s) <= max(smallnum, eps(T) * (bb * (aa / s)))
+                            split = true
+                        end
+                    end
                 end
-            elseif shiftmethod == :Rayleigh
-                @mydebug println("Single shift with Rayleigh shift! Subdiagonal is: ",
-                                 _fmt_nr(HH[iend, iend - 1]))
+                if split
+                    istart = k
+                    @mydebug println("Split at $istart, subdiagonal element is ",
+                                     _fmt_nr(HH[istart, istart-1]))
+                    break
+                end
+            end
+            if !split
+                istart = 1
+            end
+            if istart > 1
+                HH[istart, istart-1] = zero(T)
+            end
+            if istart >= iend-1
+                deflate = true
+                break
+            end
 
-                # Run a bulge chase
-                singleShiftQR!(HH, τ, Z, Hmm, istart, iend)
+            # run a QR iteration
+            iterqr += 1
+            if iterqr == 10
+                # exceptional shift from top
+                s = abs(HH[istart+1,istart]) + abs(HH[istart+2,istart+1])
+                H11 = threeq * s + HH[istart,istart]
+                H12 = m7_16 * s
+                H21 = s
+                H22 = H11
+            elseif iterqr == 20
+                # exceptional shift from bottom
+                s = abs(HH[iend,iend-1]) + abs(HH[iend-1,iend-2])
+                H11 = threeq * s + HH[iend,iend]
+                H12 = m7_16 * s
+                H21 = s
+                H22 = H11
             else
-                throw(ArgumentError("only support supported shift methods are :Francis (default) and :Rayleigh. You supplied $shiftmethod"))
+                # Francis' double shift (i.e. 2nd degree Rayleigh quotient)
+                H11 = HH[iend-1,iend-1]
+                H21 = HH[iend,iend-1]
+                H12 = HH[iend-1,iend]
+                H22 = HH[iend,iend]
             end
-        end
-        if iend <= 2
-            if standardize
-                if iend == 1
-                    putw!(w,HH[iend,iend])
-                elseif iend == 2
-                    @mydebug println("final std. iend = $iend")
-                    H2 = HH[1:2,1:2]
-                    G2,w1,w2 = _gs2x2!(H2,2)
-                    putw!(w,w2)
-                    putw!(w,w1)
-                    lmul!(G2,HH)
-                    rmul!(view(HH,1:2,:),G2')
-                    HH[1:2,1:2] .= H2 # clean
-                    Z === nothing || rmul!(Z,G2')
+            s = abs(H11) + abs(H12) + abs(H21) + abs(H22)
+            if s == 0
+                r1r,r2r,r1i,r2i = zero(T),zero(T),zero(T),zero(T)
+            else
+                H11 /= s
+                H12 /= s
+                H21 /= s
+                H22 /= s
+                tr = (H11+H22) / T(2)
+                d = (H11-tr) * (H22-tr) - H12 * H21
+                rtd = sqrt(abs(d))
+                if d >= 0
+                    # conjugate pair
+                    r1r = tr*s
+                    r2r = r1r
+                    r1i = rtd * s
+                    r2i = -r1i
+                else
+                    # duplicate real shifts
+                    r1r = tr + rtd
+                    r2r = tr - rtd
+                    if abs(r1r - H22) <= abs(r2r - H22)
+                        r1r *= s
+                        r2r = r1r
+                    else
+                        r2r *= s
+                        r1r = r2r
+                    end
+                    r1i, r2i = zero(T), zero(T)
                 end
             end
-            break
+            doubleShiftQR!(HH, Z, complex(r1r, r1i), complex(r2r, r2i), istart, iend)
+        end
+        if deflate && (istart >= iend)
+            # if block size is one we deflate
+            thisw = HH[iend,iend]
+            putw!(w, thisw)
+            iend = istart-1
+            @mydebug println("Deflate one. New iend is $iend. w=",_fmt_nr(thisw))
+        elseif deflate && (istart + 1 == iend)
+            # and the same for a 2x2 block
+            H2 = HH[iend-1:iend,iend-1:iend]
+            G2,w1,w2 = _gs2x2!(H2,iend)
+            putw!(w,w2)
+            putw!(w,w1)
+            lmul!(G2,view(HH,:,istart:n))
+            rmul!(view(HH,1:iend,:),G2')
+            HH[iend-1:iend,iend-1:iend] .= H2 # clean
+            if iend > 2
+                HH[iend-1,iend-2] = 0
+            end
+            Z === nothing || rmul!(Z,G2')
+        end
+        iend = istart-1
+        @mydebug begin
+            println("Deflate two. New iend is $iend w1=",_fmt_nr(w1),
+                    " w2=",_fmt_nr(w2))
         end
     end
 
     TT = triu(HH,-1)
-    if standardize
-        v = w
-    else
-        v = _geigvals!(TT)
-    end
-    return Schur{T,typeof(TT)}(TT, Z === nothing ? similar(TT,0,0) : Z, v)
+    return Schur{T,typeof(TT)}(TT, Z === nothing ? similar(TT,0,0) : Z, w)
 end
 
 # compute Schur decomposition of real 2x2 in standard form
@@ -685,9 +729,9 @@ function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
     H = _hessenberg!(A)
     if wantZ
         Z = _materializeQ(H)
-        S = _gschur!(H, Z; kwargs...)
+        S = gschur!(H, Z; kwargs...)
     else
-        S = _gschur!(H; kwargs...)
+        S = gschur!(H; kwargs...)
     end
     if scaleA
         safescale!(S.T, cscale, anrm)
@@ -696,110 +740,113 @@ function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
     S
 end
 
-function singleShiftQR!(HH::StridedMatrix{T}, τ::Rotation, Z, shift::Number, istart::Integer, iend::Integer) where {T <: Real}
-    m = size(HH, 1)
-    H11 = HH[istart, istart]
-    H21 = HH[istart + 1, istart]
-    if m > istart + 1
-        Htmp = HH[istart + 2, istart]
-        HH[istart + 2, istart] = 0
+function doubleShiftQR!(H::StridedMatrix{T}, Z, shift1, shift2,
+                        istart::Integer, iend::Integer) where {T <: Real}
+    n = size(H,1)
+    @mydebug Hsave = Z*H*Z'
+    @mydebug function dcheck(str)
+        print(str," decomp err ", norm(Hsave - Z*H*Z'))
     end
-    G, _ = givens(H11 - shift, H21, istart, istart + 1)
-    lmul!(G, view(HH, :, istart:m))
-    rmul!(view(HH, 1:min(istart + 2, iend), :), G')
-    lmul!(G, τ)
-    Z === nothing || rmul!(Z,G')
-    for i = istart:iend - 2
-        G, _ = givens(HH[i + 1, i], HH[i + 2, i], i + 1, i + 2)
-        lmul!(G, view(HH, :, i:m))
-        HH[i + 2, i] = Htmp
-        if i < iend - 2
-            Htmp = HH[i + 3, i + 1]
-            HH[i + 3, i + 1] = 0
+    i1 = 1
+    i2 = n
+    r1r, r1i = reim(shift1)
+    r2r, r2i = reim(shift2)
+    v = zeros(T,3)
+    # look for two consecutive small subdiagonals
+    mx = istart
+    for m=iend-2:-1:istart
+        # Determine whether starting double-shift QR iteration
+        # at row m would make H[m,m-1] negligible.
+        # Use scaling to avoid over/underflow.
+        H21s = H[m+1,m]
+        s = abs(H[m,m] - r2r) + abs(r2i) + abs(H21s)
+        H21s /= s
+        v[1] = H21s * H[m,m+1] +
+            (H[m,m] - r1r) * ((H[m,m]-r2r) / s) - r1i*(r2i / s)
+        v[2] = H21s * (H[m,m] + H[m+1,m+1] - r1r - r2r)
+        v[3] = H21s * H[m+2,m+1]
+        s = sum(abs.(v))
+        v ./= s
+        if (m > istart) && (abs(H[m,m-1]) * (abs(v[2]) + abs(v[3])) <=
+                            eps(T) * abs(v[1]) *
+                            (abs(H[m-1,m-1]) + abs(H[m,m]) + abs(H[m+1,m+1])))
+            mx = m
+            break
         end
-        rmul!(view(HH, 1:min(i + 3, iend), :), G')
-        Z === nothing || rmul!(Z,G')
     end
-    return HH
-end
-
-function doubleShiftQR!(HH::StridedMatrix{T}, τ::Rotation, Z, shiftTrace::Number, shiftDeterminant::Number, istart::Integer, iend::Integer) where {T <: Real}
-    m = size(HH, 1)
-    H11 = HH[istart, istart]
-    H21 = HH[istart + 1, istart]
-    Htmp11 = HH[istart + 2, istart]
-    HH[istart + 2, istart] = 0
-    if istart + 3 <= m
-        Htmp21 = HH[istart + 3, istart]
-        HH[istart + 3, istart] = 0
-        Htmp22 = HH[istart + 3, istart + 1]
-        HH[istart + 3, istart + 1] = 0
-    else
-        # values doen't matter in this case but variables should be initialized
-        Htmp21 = Htmp22 = Htmp11
-    end
-    G1, r = givens(H11*H11 + HH[istart, istart + 1]*H21 - shiftTrace*H11 + shiftDeterminant, H21*(H11 + HH[istart + 1, istart + 1] - shiftTrace), istart, istart + 1)
-    G2, _ = givens(r, H21*HH[istart + 2, istart + 1], istart, istart + 2)
-    vHH = view(HH, :, istart:m)
-    lmul!(G1, vHH)
-    lmul!(G2, vHH)
-    vHH = view(HH, 1:min(istart + 3, m), :)
-    rmul!(vHH, G1')
-    rmul!(vHH, G2')
-    lmul!(G1, τ)
-    lmul!(G2, τ)
-    Z === nothing || rmul!(Z,G1')
-    Z === nothing || rmul!(Z,G2')
-    for i = istart:iend - 2
-        for j = 1:2
-            if i + j + 1 > iend break end
-            # G, _ = givens(H.H,i+1,i+j+1,i)
-            G, _ = givens(HH[i + 1, i], HH[i + j + 1, i], i + 1, i + j + 1)
-            lmul!(G, view(HH, :, i:m))
-            HH[i + j + 1, i] = Htmp11
-            Htmp11 = Htmp21
-            # if i + j + 2 <= iend
-                # Htmp21 = HH[i + j + 2, i + 1]
-                # HH[i + j + 2, i + 1] = 0
-            # end
-            if i + 4 <= iend
-                Htmp22 = HH[i + 4, i + j]
-                HH[i + 4, i + j] = 0
+    @mydebug println("QR sweep $mx:$iend, shifts ",_fmt_nr(shift1)," ",_fmt_nr(shift2),
+                     " subdiags ", _fmt_nr(H[iend-1,iend-2])," ",_fmt_nr(H[iend,iend-1]))
+    for k=mx:iend-1
+        # first iteration creates a bulge using reflection based on v
+        # subsequent iterations use reflections to restore Hessenberg form
+        # in column k-1
+        nr =  min(3, iend-k+1) # order of G
+        if k > mx
+            v[1:nr] .= H[k:k+nr-1,k-1]
+        end
+        @mydebug println(" nr=$nr v=$v ")
+        τ1 = _reflector!(view(v,1:nr))
+        if k > mx
+            H[k,k-1] = v[1]
+            H[k+1,k-1] = zero(T)
+            if k < iend-1
+                H[k+2,k-1] = zero(T)
             end
-            rmul!(view(HH, 1:min(i + j + 2, iend), :), G')
-            Z === nothing || rmul!(Z,G')
+        elseif mx > istart
+            # avoid problems when v[2] and v[3] underflow
+            H[k,k-1] *= (one(T) - τ1)
         end
-    end
-    return HH
-end
-
-# get eigenvalues from a quasitriangular Schur factor
-function _geigvals!(HH::StridedMatrix{T}; tol = eps(T)) where {T <: Real}
-    # this is used for the non-standard form
-    n = size(HH, 1)
-    vals = Vector{complex(T)}(undef, n)
-    i = 1
-    while i < n
-        Hii = HH[i, i]
-        Hi1i1 = HH[i + 1, i + 1]
-        rtest = tol*(abs(Hi1i1) + abs(Hii))
-        if abs(HH[i + 1, i]) < rtest
-            vals[i] = Hii
-            i += 1
-        else
-            d = Hii*Hi1i1 - HH[i, i + 1]*HH[i + 1, i]
-            t = Hii + Hi1i1
-            x = 0.5*t
-            y = sqrt(complex(x*x - d))
-            vals[i] = x + y
-            vals[i + 1] = x - y
-            i += 2
+        v2 = v[2]
+        τ2 = τ1 * v2
+        if nr == 3
+            v3 = v[3]
+            τ3 = τ1 * v3
+            # apply G from left; transform H[:,k:i2]
+            for j=k:i2
+                ss = H[k,j] + v2 * H[k+1,j] + v3 * H[k+2,j]
+                H[k,j] -= ss * τ1
+                H[k+1,j] -= ss * τ2
+                H[k+2,j] -= ss * τ3
+            end
+            # apply G from right; transform H[i1:min(k+3,iend),:]
+            for j=i1:min(k+3,iend)
+                ss = H[j,k] + v2 * H[j,k+1] + v3 * H[j,k+2]
+                H[j,k] -= ss * τ1
+                H[j,k+1] -= ss * τ2
+                H[j,k+2] -= ss * τ3
+            end
+            if !(Z === nothing)
+                for j in 1:size(Z,1)
+                    ss = Z[j,k] + v2 * Z[j,k+1] + v3 * Z[j,k+2]
+                    Z[j,k] -= ss * τ1
+                    Z[j,k+1] -= ss * τ2
+                    Z[j,k+2] -= ss * τ3
+                end
+            end
+        elseif nr == 2
+            # apply G from left; transform H[:,k:i2]
+            for j=k:i2
+                ss = H[k,j] + v2 * H[k+1,j]
+                H[k,j] -= ss * τ1
+                H[k+1,j] -= ss * τ2
+            end
+            # apply G from right; transform H[i1:iend,:]
+            for j=i1:iend
+                ss = H[j,k] + v2 * H[j,k+1]
+                H[j,k] -= ss * τ1
+                H[j,k+1] -= ss * τ2
+            end
+            if !(Z === nothing)
+                for j in 1:size(Z,1)
+                    ss = Z[j,k] + v2 * Z[j,k+1]
+                    Z[j,k] -= ss * τ1
+                    Z[j,k+1] -= ss * τ2
+                end
+            end
         end
-    end
-    if i == n
-        vals[i] = HH[n, n]
-    end
-    return vals
+        @mydebug dcheck(" QR k=$k ")
+    end # k loop
+    @mydebug println()
 end
 
 include("vectors.jl")

@@ -1,10 +1,3 @@
-# This is the value of standardize used for the vast majority of tests:
-const _standard = Ref(true)
-
-if !_standard[]
-    @info "Suppressing 2x2 block checks pending standardization fixes."
-end
-
 # Check that 2x2 diagonal blocks have standard form.
 # This requires that tiny values have been cleaned out.
 function checkblocks(A::StridedMatrix; debug=false)
@@ -59,13 +52,12 @@ function checkeigvals(A::StridedMatrix{T}, w::StridedVector, tol; debug=false
     isok
 end
 
-function schurtest(A::Matrix{T}, tol; normal=false, standard=_standard[],
-                   baddec=false,
+function schurtest(A::Matrix{T}, tol; normal=false, baddec=false,
                    ) where {T<:Real}
     n = size(A,1)
     ulp = eps(T)
-    if T <: BlasFloat || (standard != GenericSchur._STANDARDIZE_DEFAULT)
-        S = GenericSchur.gschur(A, standardize=standard)
+    if T <: BlasFloat
+        S = GenericSchur.gschur(A)
     else
         # FIXME: no keywords allowed here; thanks, LinearAlgebra
         S = schur(A)
@@ -73,9 +65,7 @@ function schurtest(A::Matrix{T}, tol; normal=false, standard=_standard[],
     # test 1: S.T is upper quasi-triangular
     @test all(tril(S.T,-2) .== 0)
     # check complex 2x2 blocks
-    if standard
-        @test checkblocks(S.T)
-    end
+    @test checkblocks(S.T)
     # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
     if baddec
         @test_broken norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
@@ -85,9 +75,7 @@ function schurtest(A::Matrix{T}, tol; normal=false, standard=_standard[],
     # test 3: S.Z is orthogonal: norm(I - S.Z * S.Z') / (n * ulp) < tol
     @test norm(I - S.Z * S.Z') / (n * ulp) < tol
     # test 4: S.values are e.v. of T
-    if standard
-        @test checkeigvals(S.T, S.values, tol)
-    end
+    @test checkeigvals(S.T, S.values, tol)
 
     # It is tempting to check eigenvalues against LAPACK eigvals(A)
     # for suitable types, but the comparison is misleading without
@@ -101,19 +89,33 @@ function schurtest(A::Matrix{T}, tol; normal=false, standard=_standard[],
         # TODO: in this case comparison to LAPACK eigenvalues is legit
     end
 
-    if standard
-        Sc = triangularize(S)
+    Sc = triangularize(S)
 
-        # test 1: S.T is upper triangular
-        @test all(tril(Sc.T,-1) .== 0)
-        # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
-        @test norm(A - Sc.Z * Sc.T * Sc.Z') / (n * norm(A) * ulp) < tol
-        # test 3: S.Z is unitary: norm(I - S.Z * S.Z') / (n * ulp) < tol
-        @test norm(I - Sc.Z * Sc.Z') / (n * ulp) < tol
-        # test 4: S.values are e.v. of T
-        @test all(csort(Sc.values) .== csort(diag(Sc.T)))
-    end
+    # test 1: S.T is upper triangular
+    @test all(tril(Sc.T,-1) .== 0)
+    # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
+    @test norm(A - Sc.Z * Sc.T * Sc.Z') / (n * norm(A) * ulp) < tol
+    # test 3: S.Z is unitary: norm(I - S.Z * S.Z') / (n * ulp) < tol
+    @test norm(I - Sc.Z * Sc.Z') / (n * ulp) < tol
+    # test 4: S.values are e.v. of T
+    @test all(csort(Sc.values) .== csort(diag(Sc.T)))
+end
 
+function hesstest(A::Matrix{T}, tol) where {T<:Real}
+    n = size(A,1)
+    ulp = eps(real(T))
+    H = invoke(GenericSchur._hessenberg!,
+               Tuple{StridedMatrix{T},} where T,
+               copy(A))
+    Q = GenericSchur._materializeQ(H)
+    # test 1: H.H is upper triangular
+    @test all(tril(H.H,-2) .== 0)
+    # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
+    decomp_err = norm(A - Q * H.H * Q') / (n * norm(A) * ulp)
+    @test decomp_err < tol
+    # test 3: S.Z is orthogonal: norm(I - S.Z * S.Z') / (n * ulp) < tol
+    orth_err = norm(I - Q * Q') / (n * ulp)
+    @test orth_err < tol
 end
 
 # random orthogonal matrix
@@ -132,8 +134,22 @@ end
 
 Random.seed!(1234)
 
-for T in [BigFloat,Float16]
-    @testset "group $T" begin
+# Don't try BigFloat here because its floatmin is perverse.
+@testset "Hessenberg $T" for T in [Float64, Float16]
+    n = 32
+    tol = 10
+    A = rand(T,n,n)
+    hesstest(A, tol)
+    # exercise some underflow-related logic
+    s = 100 * floatmin(real(T))
+    Asmall = s * A
+    hesstest(Asmall, tol)
+    s = floatmax(real(T)) / 100
+    Abig = s * A
+    hesstest(Abig, tol)
+end
+
+@testset "group $T" for T in [BigFloat,Float16]
         unfl = floatmin(T)
         ovfl = one(T) / unfl
         ulp = eps(T)
@@ -155,21 +171,24 @@ for T in [BigFloat,Float16]
             end
         end
 
-    end # group testset
-end # type loop (non-BlasFloat)
+end # group testset
 
 @testset "Godunov" begin
+    # Set precision fine enough for eigval condition to apply,
+    # but not fine enough to make it a slam-dunk.
     setprecision(BigFloat, 80) do
-        A,v = godunov(BigFloat)
+        A,v,econd = godunov(BigFloat)
         S = schur(A)
-        @test isapprox(csort(S.values),v,atol=2e-5)
+        δ = norm(S.Z*S.T*S.Z'-A)
+        @test δ < 100 * eps(big(1.0)) * norm(A)
+        t = 3*δ*econd
+        @test isapprox(csort(S.values),v,atol=t)
         vnew = eigvals(A)
-        @test isapprox(csort(vnew),v,atol=2e-5)
+        @test isapprox(csort(vnew),v,atol=t)
     end
 end
 
-for T in [Float64, Float32]
-    @testset "group $T" begin
+@testset "group $T" for T in [Float64, Float32]
 
         unfl = floatmin(T)
         ovfl = one(T) / unfl
@@ -292,8 +311,6 @@ for T in [Float64, Float32]
                         println("latmr: n=$n $anorm, $imode, $rcond")
                     latmr!(A,anorm,imode,rcond)
                     schurtest(A,tols[itype])
-                    # throw this in for coverage
-                    schurtest(A,tols[itype],standard=!_standard[])
                 end
             end
         end
@@ -323,6 +340,11 @@ for T in [Float64, Float32]
             end
         end
 
-
-    end # group testset
-end # type loop (BlasFloat)
+    @testset "tiny, almost degenerate" begin
+        λ1, λ2 = (one(T) + 2eps(T), one(T) - 2eps(T))
+        B = diagm(0 => [λ1,λ2]) + (eps(T)/4) * rand(T,2,2)
+        G,w1,w2 = GenericSchur._gs2x2!(B, 3)
+        @test abs(max(w1,w2) - λ1) < 2eps(T)
+        @test abs(min(w1,w2) - λ2) < 2eps(T)
+    end
+end # group testset
