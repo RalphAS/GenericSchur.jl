@@ -10,7 +10,7 @@ import LinearAlgebra: adjoint, mul!, rmul!
 # Univ. of Colorado Denver
 # NAG Ltd.
 function _reflector!(x::AbstractVector{T}) where {T<:Real}
-    Base.require_one_based_indexing(x)
+    require_one_based_indexing(x)
     n = length(x)
     n <= 1 && return zero(T)
     sfmin = 2floatmin(T) / eps(T)
@@ -54,7 +54,7 @@ function _reflector!(x::AbstractVector{T}) where {T<:Real}
 end
 
 function _reflector!(x::AbstractVector{T}) where {T<:Complex}
-    Base.require_one_based_indexing(x)
+    require_one_based_indexing(x)
     n = length(x)
     # we need to make subdiagonals real so the n=1 case is nontrivial for complex eltype
     n < 1 && return zero(T)

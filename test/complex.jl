@@ -75,19 +75,24 @@ function hesstest(A::Matrix{T}, tol) where {T<:Complex}
     n = size(A,1)
     ulp = eps(real(T))
     H = invoke(GenericSchur._hessenberg!,
-               Tuple{StridedMatrix{T},} where T,
+               Tuple{StridedMatrix{Ty},} where Ty,
                copy(A))
     Q = GenericSchur._materializeQ(H)
-    # test 1: H.H is upper triangular
-    @test all(tril(H.H,-2) .== 0)
+    if VERSION < v"1.3"
+        HH = triu(H.data, -1)
+    else
+        HH = H.H
+        # test 1: H.H is upper triangular
+        @test all(tril(HH,-2) .== 0)
+    end
     # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
-    decomp_err = norm(A - Q * H.H * Q') / (n * norm(A) * ulp)
+    decomp_err = norm(A - Q * HH * Q') / (n * norm(A) * ulp)
     @test decomp_err < tol
     # test 3: S.Z is orthogonal: norm(I - S.Z * S.Z') / (n * ulp) < tol
     orth_err = norm(I - Q * Q') / (n * ulp)
     @test orth_err < tol
     # test 4: subdiagonal is real
-    @test all(isreal.(diag(H.H,-1)))
+    @test all(isreal.(diag(HH,-1)))
 end
 
 

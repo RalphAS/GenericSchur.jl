@@ -3,6 +3,9 @@ using LinearAlgebra
 using LinearAlgebra: Givens, Rotation
 using Printf
 import LinearAlgebra: lmul!, mul!, checksquare, ldiv!
+if VERSION >= v"1.2"
+    using Base: require_one_based_indexing
+end
 
 # This is the public interface of the package.
 # Wrappers like `schur` and `eigvals` should just work.

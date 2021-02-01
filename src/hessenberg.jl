@@ -5,6 +5,11 @@ if VERSION < v"1.3"
         data::S
         τ::Vector{U}
     end
+    function HessenbergFactorization(A::S, τ::AbstractVector{U}
+                                     ) where {S <: AbstractMatrix{T}, U} where T
+        HessenbergFactorization{T,S,U}(A, τ)
+    end
+
     Base.size(H::HessenbergFactorization, args...) = size(H.data, args...)
 
     function _hessenberg!(A::StridedMatrix{T}) where T

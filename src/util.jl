@@ -425,7 +425,7 @@ end
 
 # stdlib norm2 uses a poorly implemented generic scheme for short vectors.
 function _norm2(x::AbstractVector{T}) where {T<:Real}
-    Base.require_one_based_indexing(x)
+    require_one_based_indexing(x)
     n = length(x)
     n < 1 && return zero(T)
     n == 1 && return abs(x[1])
@@ -446,7 +446,7 @@ function _norm2(x::AbstractVector{T}) where {T<:Real}
 end
 
 function _norm2(x::AbstractVector{T}) where {T<:Complex}
-    Base.require_one_based_indexing(x)
+    require_one_based_indexing(x)
     n = length(x)
     RT = real(T)
     n < 1 && return zero(RT)
@@ -488,4 +488,12 @@ function _hypot3(x::T, y::T, z::T) where {T}
     rw = one(real(T)) / w
     r::real(T) = w * sqrt((rw * xa)^2 + (rw * ya)^2 + (rw * za)^2)
     return r
+end
+
+if VERSION < v"1.2"
+    function require_one_based_indexing(A::AbstractArray)
+        if Base.has_offset_axes(A)
+            throw(ArgumentError("offset axes are not supported"))
+        end
+    end
 end
