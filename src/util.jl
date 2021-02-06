@@ -103,14 +103,14 @@ end
 # such that components of x are manageable.
 # NB: works with leading n×n block of A and leading n terms of b, x
 # Hence all the loops must be explicit.
-# This is a translation of (part of) LAPACK::zlatrs, q.v. for details
+# This is a translation of (part of) LAPACK::zlatrs, q.v. for details.
+# Provide `b` in argument `x`; note that `cnorm` may be updated.
 function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
 
-    cabs2(z) = abs(real(z)/2) + abs(imag(z)/2)
+    cabs1half(z) = abs(real(z)/2) + abs(imag(z)/2)
 
     RT = real(T)
     half = one(RT) / 2
-#    smallnum = safemin(RT) / (2*eps(RT)) # WARNING: assumes base 2
     smallnum = safemin(RT) / eps(RT)
     bignum = one(RT)/ smallnum
     xscale = one(RT)
@@ -123,13 +123,13 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
     if tmax <= bignum * half
         tscale = one(RT)
     else
-        tscale = one(RT) / (smallnum * tmax)
-        cnorm .*= tscale
+        tscale = half / (smallnum * tmax)
+        cnorm[1:n] .*= tscale
     end
     # bound on solution vector:
-    xmax = cabs2(x[1])
+    xmax = cabs1half(x[1])
     @inbounds for j=2:n
-        xmax = max(xmax,cabs2(x[j]))
+        xmax = max(xmax,cabs1half(x[j]))
     end
     xbound = xmax
     if tscale != one(RT)
@@ -138,9 +138,11 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
         # compute grow
         grow = half / max(xbound, smallnum)
         xbound = grow
+        toosmall = false
         for j=n:-1:1
             # give up if too small
-            (grow <= smallnum) && break
+            toosmall = (grow <= smallnum)
+            toosmall && break
             tjjs = A[j,j]
             tjj = abs1(tjjs)
             if tjj >= smallnum
@@ -156,7 +158,9 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
                 grow = zero(RT)
             end
         end
-        grow = xbound
+        if !toosmall
+            grow = xbound
+        end
     end
 
     if grow * tscale > smallnum
@@ -170,7 +174,7 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
     else
         if xmax > bignum * half
             # scale so all(abs.(x) .<= bignum)
-            xscale = bignum * half / xmax
+            xscale = (bignum * half) / xmax
             @inbounds for i=1:n; x[i] *= xscale; end
             xmax = bignum
         else
@@ -199,7 +203,7 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
                 if xj > tjj*bignum
                     # scale by (1/abs(x[j]))*abs(A[j,j]))*bignum
                     # to avoid overflow when dividing by A[j,j]
-                    rec = tjj * bignum / xj
+                    rec = (tjj * bignum) / xj
                     if cnorm[j] > one(RT)
                         # scale by 1/cnorm[j] to avoid overflow
                         # when multiplying x[j] by column j
@@ -245,17 +249,18 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
                 end
             end
         end
+        xscale /= tscale
     end
     if tscale != one(RT)
         @inbounds for i=1:n; cnorm[i] *= one(RT)/tscale; end
     end
-    xscale
+    return xscale
 end
 
 # conjugate transpose version
 function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
 
-    cabs2(z) = abs(real(z)/2) + abs(imag(z)/2)
+    cabs1half(z) = abs(real(z)/2) + abs(imag(z)/2)
 
     RT = real(T)
     half = one(RT) / 2
@@ -272,13 +277,13 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
     if tmax <= bignum * half
         tscale = one(RT)
     else
-        tscale = one(RT) / (smallnum * tmax)
-        cnorm .*= tscale
+        tscale = half / (smallnum * tmax)
+        cnorm[1:n] .*= tscale
     end
     # bound on solution vector:
-    xmax = cabs2(x[1])
+    xmax = cabs1half(x[1])
     @inbounds for j=2:n
-        xmax = max(xmax,cabs2(x[j]))
+        xmax = max(xmax,cabs1half(x[j]))
     end
     xbound = xmax
     if tscale != one(RT)
@@ -287,9 +292,11 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
         # compute grow
         grow = half / max(xbound, smallnum)
         xbound = grow
+        toosmall = false
         for j=1:n
             # give up if too small
-            (grow <= smallnum) && break
+            toosmall = (grow <= smallnum)
+            toosmall && break
             # G[j] = max(G[j-1], M[j-1]*(1+cnorm[j]))
             xj = one(RT) + cnorm[j]
             grow = min(grow, xbound / xj)
@@ -304,7 +311,9 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
                 xbound = zero(RT)
             end
         end
-        grow = min(grow, xbound)
+        if !toosmall
+            grow = min(grow, xbound)
+        end
     end
 
     if grow * tscale > smallnum
@@ -317,6 +326,14 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
             x[j] = conj(A[j,j]) \ z
         end
     else
+        if xmax > bignum * half
+            # scale so all(abs.(x) .<= bignum)
+            xscale = (bignum * half) / xmax
+            @inbounds for i=1:n; x[i] *= xscale; end
+            xmax = bignum
+        else
+            xmax *= 2
+        end
         for j=1:n
             # compute x[j] = b[j] - Σ_(k≠j) A[k,j] x[k]
             xj = abs1(x[j])
@@ -330,7 +347,7 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
                 if tjj > one(RT)
                     # divide by A[j,j] when scaling if A[j,j] > 1
                     rec = min(one(RT), rec*tjj)
-                    uscale = uscale / tjjs
+                    uscale /= tjjs
                 end
                 if rec < one(RT)
                     @inbounds for i=1:n; x[i] *= rec; end
@@ -372,7 +389,7 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
                     x[j] = x[j] / tjjs
                 else
                     # zero diag: compute a null vector of Aᴴ
-                    x .= zero(T)
+                    x[1:n] .= zero(T)
                     x[j] = one(T)
                     xscale = zero(RT)
                     xmax = zero(RT)

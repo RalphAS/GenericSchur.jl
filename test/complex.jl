@@ -4,6 +4,33 @@ using Printf
 diagnosing = false
 const dgn = Ref(diagnosing)
 
+# isolate eigvec tests for use with special cases
+function vectest(A::Matrix{T}, S::Schur{T2}, vtol; normal=false) where {T<:Complex, T2<:Complex}
+    n = size(A,1)
+    ulp = eps(real(T))
+    VR = eigvecs(S)
+    if verbosity[] > 1
+        vec_err = norm(A * VR - VR * diagm(0 => S.values)) / (n * norm(A) * ulp)
+        println("r.eigenvector error: $vec_err, vtol = $vtol")
+        @test vec_err < 1000
+    else
+        @test norm(A * VR - VR * diagm(0 => S.values)) / (n * norm(A) * ulp) < vtol
+    end
+    VL = eigvecs(S, left=true)
+    if verbosity[] > 1
+        vec_err = norm(A' * VL - VL * diagm(0 => conj.(S.values))) / (n * norm(A) * ulp)
+        println("l.eigenvector error: $vec_err, vtol = $vtol")
+        @test vec_err < 1000
+    else
+        @test norm(A' * VL - VL * diagm(0 => conj.(S.values))) / (n * norm(A) * ulp) < vtol
+    end
+    if normal
+        # check orthonormality of vectors where appropriate
+        @test norm(VR*VR'-I) / (n * ulp) < vtol
+        @test norm(VL*VL'-I) / (n * ulp) < vtol
+    end
+end
+
 function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
     n = size(A,1)
     ulp = eps(real(T))
@@ -36,39 +63,8 @@ function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
         # verify that Schur diagonalizes normal matrices
         @test norm(triu(S.T,1)) / (n * norm(A) * ulp) < tol
     end
-    # CHECKME: a few hard cases fail; is overflow protection sufficient?
-    fom = norm(A) / (floatmin(real(T))/eps(real(T)))
-    FOM = norm(A) / (floatmax(real(T))*eps(real(T)))
-    if (fom > 25) && (FOM < 0.04)
-        As = A
-        Ss = S
-        vtol = tol
-    else
-        vtol = (T == Complex{Float16} ? 200 : 20)
-        # test work-arounds
-        if fom <= 25
-            As = A * (floatmax(real(T))*eps(real(T)))
-            Ss = GenericSchur.gschur(As)
-        elseif FOM >= 0.04
-            As =  A * (floatmin(real(T))/eps(real(T)))
-            Ss = GenericSchur.gschur(As)
-        end
-    end
-    VR = eigvecs(Ss)
-    if verbosity[] > 1
-        vec_err = norm(As * VR - VR * diagm(0 => Ss.values)) / (n * norm(As) * ulp)
-        println("eigenvector error: $vec_err, vtol = $vtol")
-        @test vec_err < 1000
-    else
-        @test norm(As * VR - VR * diagm(0 => Ss.values)) / (n * norm(As) * ulp) < vtol
-    end
-    VL = eigvecs(Ss, left=true)
-    @test norm(As' * VL - VL * diagm(0 => conj.(Ss.values))) / (n * norm(As) * ulp) < vtol
-    if normal
-        # check orthonormality of vectors where appropriate
-        @test norm(VR*VR'-I) / (n * ulp) < vtol
-        @test norm(VL*VL'-I) / (n * ulp) < vtol
-    end
+    vtol = tol
+    vectest(A, S, tol, normal=normal)
 end
 
 function hesstest(A::Matrix{T}, tol) where {T<:Complex}
@@ -99,7 +95,6 @@ end
 """
 generate a random unitary matrix
 
-Just something good enough for present purposes.
 Unitary matrices are normal, so Schur decomposition is diagonal for them.
 (This is not only another test, but sometimes actually useful.)
 """
@@ -107,12 +102,12 @@ function randu(::Type{T},n) where {T<:Complex}
     if real(T) ∈ [Float16,Float32,Float64]
         A = randn(T,n,n)
         F = qr(A)
-        return Matrix(F.Q)
+        return Matrix(F.Q) * Diagonal(sign.(diag(F.R)))
     else
         # don't have normal deviates for other types, but need appropriate QR
         A = randn(ComplexF64,n,n)
         F = qr(convert.(T,A))
-        return Matrix(F.Q)
+        return Matrix(F.Q) * Diagonal(sign.(diag(F.R)))
     end
 end
 
@@ -343,6 +338,45 @@ end
                 println("latmr: n=$n $anorm, $imode, $rcond")
             latmr!(A,anorm,imode,rcond)
             schurtest(A,tols[itype])
+        end
+    end
+end
+
+@testset "triangular, specified ev" begin
+    # This is done peculiarly to exercise branches in the eigenvector solver.
+    # In particular, we stuff the UT directly into a Schur object so we know exactly
+    # what's on the diagonal.
+    # (Probably happens for normal schur(), but I didn't promise that anywhere.)
+    kconds =   [2,2,2,2,2,2,2,2,2,2,2,2]
+    kmagn =    [1,1,1,1,2,2,2,2,3,3,3,3]
+    kmode =    [5,0,0,0,5,0,0,0,5,0,0,0]
+    mydmodes = [0,0,1,2,0,0,1,2,0,0,1,2]
+    nj = length(kmagn)
+    itype = 6
+    for n in ens
+        for j in 1:nj
+            A = zeros(T,n,n)
+            imode = kmode[j]
+            rcond = ulpinv
+            anorm = magns[kmagn[j]]
+            d_mode = mydmodes[j]
+            (verbosity[] > 1) &&
+                println("latmr: n=$n $anorm, $imode, $rcond")
+            if imode == 0
+                d = rand(T,n)
+                if d_mode == 0
+                    d[2] = d[n-1]
+                elseif d_mode == 1
+                    d[2] = d[n-1] * nextfloat(one(real(T)))
+                else
+                    d[2] = d[n-1] * prevfloat(one(real(T)))
+                end
+                latmr!(A, anorm, imode, rcond, kl=0, d=d)
+            else
+                latmr!(A, anorm, imode, rcond, kl=0)
+            end
+            S = LinearAlgebra.Schur(A, Diagonal(ones(T,n)), diag(A))
+            vectest(A, S, tols[itype])
         end
     end
 end

@@ -32,9 +32,10 @@ function godunov(T)
     A,vals,econd
 end
 
+include("complex.jl")
 include("balance.jl")
 include("real.jl")
-include("complex.jl")
+#include("complex.jl")
 
 include("ordschur.jl")
 

@@ -236,18 +236,21 @@ latmr!(A::Matrix{T<:BLAStype}, anorm::Real, imode::Int, rcond::Real,
                 grade::AbstractChar = 'N', model::Int = 4, moder::Int = 4,
                 pivtng::AbstractChar = 'N', ipivot::Vector{BlasInt} = BlasInt[],
                 sparse::Real = 0.0,
-                pack::AbstractChar = 'N'
+                pack::AbstractChar = 'N',
+                d::Vector, dl::Vector, dr::Vector
                 )
 
 - `imode`: 1 - clustered small, 2 - clustered large, 3 - exponential,
-       4 - arithmetic, 5 - random log, 6 - random (<0 for reversed order)
-- `imode = 0`, explicitly specified diagonal, is not yet implemented.
+       4 - arithmetic, 5 - random log, 6 - random (<0 for reversed order),
+       0 - eigenvalues explicitly specified in `d`.
 - `sym`: `'S'` - symmetric, `'H'` - Hermitian, `'N'` - nonsymmetric
 - `rcond`: ratio of extreme diagonal elements
 - `kl,ku`: lower and upper bandwidths
 - `sparse`: fraction to be nulled out
 - `dist`: character key for distribution to be sampled: `'U'` - uniform(0,1),
    `'S'` - symmetric uniform(-1,1), `'N'` - normal, `'D'` - uniform on complex unit disk.
+- `grade`: `'N'` - do not grade, otherwise a key for pre/postmultiplication with
+      `Diagonal(dl), Diagonal(dr)`.
 """
 function latmr! end
 
@@ -263,7 +266,7 @@ for (fname, elty, relty) in ((:zlatmr_, :ComplexF64, :Float64),
                         kl::Int = size(A,2), ku::Int = size(A,2),
                         dist::AbstractChar = $elty <: Complex ? 'D' : 'S',
                         rsign::Bool = true,
-                        grade::AbstractChar = 'N', model::Int = 1, moder::Int = 1,
+                        grade::AbstractChar = 'N', mode_l::Int = 1, mode_r::Int = 1,
                         pivtng::AbstractChar = 'N',
                         ipivot::Vector{BlasInt} = Vector{BlasInt}(undef,size(A,2)),
                         sparse::Real = 0.0,
@@ -277,7 +280,6 @@ for (fname, elty, relty) in ((:zlatmr_, :ComplexF64, :Float64),
             lda = size(A,1)
             m = lda # CHECKME: is it worth generalizing?
 
-            (imode == 0) && throw(ArgumentError("imode = 0 needs explicit d,ds; not yet implemented"))
             _check_iseed(iseed)
 
             iwork = Vector{BlasInt}(undef, max(m,n))
@@ -287,8 +289,8 @@ for (fname, elty, relty) in ((:zlatmr_, :ComplexF64, :Float64),
             println("zlatmr arg list:")
             println(
                   " m $m, n $n, dist $dist, iseed $iseed, sym $sym, d $d, imode $imode, rcond $rcond, dmax $dmax,
-                  rsign $(rsign ? 'T' : 'F'), grade $grade, dl $dl, model $model, rcondl $rcondl,
-                  dr $dr, moder $moder, rcondr $rcondr, pivtng $pivtng, ipivot $ipivot,
+                  rsign $(rsign ? 'T' : 'F'), grade $grade, dl $dl, mode_l $mode_l, rcondl $rcondl,
+                  dr $dr, mode_r $mode_r, rcondr $rcondr, pivtng $pivtng, ipivot $ipivot,
                   kl $kl, ku $ku, sparse $sparse, anorm $anorm, pack $pack, A, lda $lda")
 =#
             ccall((@blasfunc($fname), liblapack), Cvoid,
@@ -304,10 +306,10 @@ for (fname, elty, relty) in ((:zlatmr_, :ComplexF64, :Float64),
                    Ref{UInt8}, # rsign
                    Ref{UInt8}, # grade
                    Ptr{$relty}, # dl(w)
-                   Ref{BlasInt}, # model
+                   Ref{BlasInt}, # mode_l
                    Ref{$relty}, # condl
                    Ptr{$relty}, # dr(w)
-                   Ref{BlasInt}, # moder
+                   Ref{BlasInt}, # mode_r
                    Ref{$relty}, # condr
                    Ref{UInt8}, # pivtng
                    Ptr{BlasInt}, # ipivot
@@ -323,8 +325,8 @@ for (fname, elty, relty) in ((:zlatmr_, :ComplexF64, :Float64),
                    Clong, Clong, Clong, Clong, Clong, Clong
                    ),
                   m, n, dist, iseed, sym, d, imode, rcond, dmax,
-                  rsign ? 'T' : 'F', grade, dl, model, rcondl,
-                  dr, moder, rcondr, pivtng, ipivot,
+                  rsign ? 'T' : 'F', grade, dl, mode_l, rcondl,
+                  dr, mode_r, rcondr, pivtng, ipivot,
                   kl, ku, sparse, anorm, pack, A, lda, iwork, info,
                   1,1,1,1,1,1)
             (info[] == 0) || error("info = $(info[]) from latmr")

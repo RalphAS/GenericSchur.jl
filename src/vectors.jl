@@ -12,7 +12,10 @@ function _geigvecs!(TT::StridedMatrix{T},
     n = size(TT,1)
     RT = real(T)
     ulp = eps(RT)
-    smallnum = safemin(RT) * (n / ulp)
+    # Note: LAPACK has
+    #   smallnum = safemin(RT) * (n / ulp)
+    # but that makes no sense to me and breaks some tests
+    smallnum = safemin(RT) * n
     vectors = Matrix{T}(undef,n,n)
     v = zeros(T,n)
 
@@ -43,7 +46,7 @@ function _geigvecs!(TT::StridedMatrix{T},
             (abs1(TT[k,k]) < smin) && (TT[k,k] = smin)
         end
         if ki > 1
-            vscale = _usolve!(TT,ki-1,v,tnorms)
+            vscale = _usolve!(TT,ki-1,v,view(tnorms, 1:ki-1))
             v[ki] = vscale
         else
             vscale = one(RT)
@@ -92,7 +95,8 @@ function _gleigvecs!(TT::StridedMatrix{T},
     n = size(TT,1)
     RT = real(T)
     ulp = eps(RT)
-    smallnum = safemin(RT) * (n / ulp)
+    # replaces LAPACK's smallnum = safemin(RT) * (n / ulp)
+    smallnum = safemin(RT) * n
     vectors = Matrix{T}(undef,n,n)
     v = zeros(T,n)
 

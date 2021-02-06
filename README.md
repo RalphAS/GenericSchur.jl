@@ -51,9 +51,6 @@ VR = eigvecs(S)
 VL = eigvecs(S,left=true)
 ```
 
-The results are currently unreliable if the Frobenius norm of `A` is very
-small or very large, so scale if necessary.
-
 #### Normalization
 
 As of v0.4, eigenvectors as returned from our `eigen` and `eigvecs` methods
