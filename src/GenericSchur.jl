@@ -5,6 +5,12 @@ using Printf
 import LinearAlgebra: lmul!, mul!, checksquare, ldiv!
 if VERSION >= v"1.2"
     using Base: require_one_based_indexing
+else
+    function require_one_based_indexing(A::AbstractArray)
+        if Base.has_offset_axes(A)
+            throw(ArgumentError("offset axes are not supported"))
+        end
+    end
 end
 
 # This is the public interface of the package.

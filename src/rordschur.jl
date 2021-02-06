@@ -481,7 +481,6 @@ end
 
 # TODO: we only need these for order=3, so just write them out inline
 
-using LinearAlgebra: require_one_based_indexing
 # apply shifted reflector from right
 @inline function _reflectorYlppa!(x::AbstractVector, τ::Number, A::StridedMatrix)
     require_one_based_indexing(x)

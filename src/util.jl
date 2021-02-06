@@ -506,11 +506,3 @@ function _hypot3(x::T, y::T, z::T) where {T}
     r::real(T) = w * sqrt((rw * xa)^2 + (rw * ya)^2 + (rw * za)^2)
     return r
 end
-
-if VERSION < v"1.2"
-    function require_one_based_indexing(A::AbstractArray)
-        if Base.has_offset_axes(A)
-            throw(ArgumentError("offset axes are not supported"))
-        end
-    end
-end
