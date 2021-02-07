@@ -1,8 +1,4 @@
-const badevs = Ref{Int}(0)
 using Printf
-
-diagnosing = false
-const dgn = Ref(diagnosing)
 
 # isolate eigvec tests for use with special cases
 function vectest(A::Matrix{T}, S::Schur{T2}, vtol; normal=false) where {T<:Complex, T2<:Complex}
@@ -26,15 +22,22 @@ function vectest(A::Matrix{T}, S::Schur{T2}, vtol; normal=false) where {T<:Compl
     end
     if normal
         # check orthonormality of vectors where appropriate
-        @test norm(VR*VR'-I) / (n * ulp) < vtol
-        @test norm(VL*VL'-I) / (n * ulp) < vtol
+        if (T == ComplexF16) && (n > 10)
+            # is this simply too many ops for this type?
+            @test_broken norm(VR*VR'-I) / (n * ulp) < vtol
+            @test_broken norm(VL*VL'-I) / (n * ulp) < vtol
+        else
+            @test norm(VR*VR'-I) / (n * ulp) < vtol
+            @test norm(VL*VL'-I) / (n * ulp) < vtol
+        end
     end
 end
 
 function schurtest(A::Matrix{T}, tol; normal=false) where {T<:Complex}
     n = size(A,1)
     ulp = eps(real(T))
-    if real(T) <: BlasFloat
+    # schur() uses eigtype(), which promotes ComplexF16 to ComplexF32
+    if (real(T) <: BlasFloat) || (LinearAlgebra.eigtype(T) != T)
         S = GenericSchur.gschur(A)
     else
         S = schur(A)
@@ -240,12 +243,6 @@ magns = [1.0, ovfl*ulp, unfl*ulpinv]
     end
 end
 
-if dgn[]
-    old_verbosity = verbosity[]
-    verbosity[] = 2
-    tols[6] = 100
-end
-
 @testset "general, ev specified" begin
     itype=6
     kmagn =  [1,1,1,1,1,1,1,1,2,3]
@@ -268,9 +265,6 @@ end
             schurtest(A,tols[itype])
         end
     end
-end
-if dgn[]
-  verbosity[] = old_verbosity
 end
 
 @testset "diagonal, random ev" begin

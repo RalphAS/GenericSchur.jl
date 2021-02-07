@@ -56,7 +56,8 @@ function schurtest(A::Matrix{T}, tol; normal=false, baddec=false,
                    ) where {T<:Real}
     n = size(A,1)
     ulp = eps(T)
-    if T <: BlasFloat
+    # schur() uses eigtype(), which promotes ComplexF16 to ComplexF32
+    if (T <: BlasFloat) || (LinearAlgebra.eigtype(T) != Complex{T})
         S = GenericSchur.gschur(A)
     else
         # FIXME: no keywords allowed here; thanks, LinearAlgebra
