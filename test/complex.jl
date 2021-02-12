@@ -94,6 +94,25 @@ function hesstest(A::Matrix{T}, tol) where {T<:Complex}
     @test all(isreal.(diag(HH,-1)))
 end
 
+function hesstest(A::Hermitian{T}, tol) where {T<:Complex}
+    n = size(A,1)
+    ulp = eps(real(T))
+    H = invoke(GenericSchur._hessenberg!,
+               Tuple{Hermitian{Ty},} where {Ty <: Complex},
+               copy(A))
+    Q = GenericSchur._materializeQ(H)
+    HH = H.H
+    # test 1: H.H is formally symtridiagonal
+    @test isa(HH, SymTridiagonal)
+    @test eltype(HH) == real(eltype(A))
+    # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
+    decomp_err = norm(A - Q * HH * Q') / (n * norm(A) * ulp)
+    @test decomp_err < tol
+    # test 3: S.Z is orthogonal: norm(I - S.Z * S.Z') / (n * ulp) < tol
+    orth_err = norm(I - Q * Q') / (n * ulp)
+    @test orth_err < tol
+end
+
 
 """
 generate a random unitary matrix
@@ -124,6 +143,23 @@ Random.seed!(1234)
     s = 100 * floatmin(real(T))
     Asmall = s * A
     hesstest(Asmall, tol)
+end
+
+if VERSION >= v"1.3"
+    @testset "Hermitian Hessenberg $T" for T in [ComplexF64, Complex{Float16}]
+        n = 32
+        tol = 10
+        A = Hermitian(rand(T,n,n), :U)
+        hesstest(A, tol)
+        s = 100 * floatmin(real(T))
+        Asmall = s * A
+        hesstest(Asmall, tol)
+        A = Hermitian(rand(T,n,n), :L)
+        hesstest(A, tol)
+        s = 100 * floatmin(real(T))
+        Asmall = s * A
+        hesstest(Asmall, tol)
+    end
 end
 
 @testset "group $T" for T in [Complex{BigFloat},Complex{Float16}]

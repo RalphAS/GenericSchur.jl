@@ -51,8 +51,120 @@ function _hessenberg!(A::StridedMatrix{T}) where T
     return Hessenberg(A, τ)
 end
 
+    function _hessenberg!(Ah::Union{Hermitian{T}, Symmetric{T}}) where T <: Real
+        _hehessenberg!(Ah, Val(Symbol(Ah.uplo)))
+    end
+    function _hessenberg!(Ah::Hermitian{T})  where T <: Complex
+        _hehessenberg!(Ah, Val(Symbol(Ah.uplo)))
+    end
+
+    function _hehessenberg!(Ah::Hermitian{T}, ::Val{:L}) where T
+        # based on LAPACK zhetd2
+        A = Ah.data
+        n = LinearAlgebra.checksquare(A)
+        τ = Vector{T}(undef, n - 1)
+        d = zeros(real(T), n)
+        e = zeros(real(T), n-1)
+        A[1,1] = real(A[1,1])
+        for i = 1:n - 1
+            # reflector to annihilate A[i+2:n,i]
+            ξ = view(A, i+1:n, i)
+            τi  = _reflector!(ξ)
+            e[i] = real(A[i+1,i])
+            if !iszero(τi)
+                ξ[1] = one(T)
+                # store x = τᵢ A ξ in tail of τ
+                w = view(τ,i:n-1)
+                mul!(w, Hermitian(view(A, i+1:n, i+1:n),:L), ξ, τi, false)
+                # compute w = ξ - (τᵢ/2) (xᴴ ξ) ξ
+                α = - (τi / 2) * dot(w, ξ)
+                w .= w .+ α .* ξ
+                # apply transformation as rank-2 update
+                rank2update!(view(A, i+1:n, i+1:n), -1, ξ, w, Val(:L))
+            else
+                A[i+1, i+1] = real(A[i+1, i+1])
+            end
+            A[i+1, i] = e[i]
+            d[i] = A[i,i]
+            τ[i] = τi
+        end
+        d[n] = A[n,n]
+        return Hessenberg(A, τ, SymTridiagonal(d, e), Ah.uplo)
+    end
+
+    function _hehessenberg!(Ah::Hermitian{T}, ::Val{:U}) where T
+        # based on LAPACK zhetd2
+        A = Ah.data
+        n = LinearAlgebra.checksquare(A)
+        τ = Vector{T}(undef, n - 1)
+        d = zeros(real(T), n)
+        e = zeros(real(T), n-1)
+        A[n,n] = real(A[n,n])
+        xi = zeros(T,n)
+        for i=n-1:-1:1
+            # reflector to annihilate A[1:i-1,i+1]
+            xi[1] = A[i,i+1]
+            xi[2:i] .= A[1:i-1,i+1]
+            ξ = view(xi,1:i)
+            τi = _reflector!(ξ)
+            e[i] = xi[1]
+            A[1:i-1,i+1] .= xi[2:i]
+            if !iszero(τi)
+                A[i,i+1] = one(T)
+                ξ = view(A, 1:i, i+1)
+                # store x = τᵢ A ξ in head of τ
+                w = view(τ,1:i)
+                mul!(w, Hermitian(view(A, 1:i, 1:i),:U), ξ, τi, false)
+                # compute w = ξ - (τᵢ/2) (xᴴ ξ) ξ
+                α = - (τi / 2) * dot(w, ξ)
+                w .= w .+ α .* ξ
+                # apply transformation as rank-2 update
+                rank2update!(view(A, 1:i, 1:i), -1, ξ, w, Val(:U))
+            else
+                A[i, i] = real(A[i, i])
+            end
+            A[i, i+1] = e[i]
+            d[i+1] = A[i+1,i+1]
+            τ[i] = τi
+        end
+        d[1] = A[1,1]
+        return Hessenberg(A, τ, SymTridiagonal(d, e), Ah.uplo)
+    end
+
+    function rank2update!(A::StridedMatrix, α::Number, x::AbstractVector, y::AbstractVector, ::Val{:U})
+        n = length(x)
+        for j=1:n
+            if iszero(x[j]) && iszero(y[j])
+                A[j,j] = real(A[j,j])
+            else
+                t1 = α * conj(y[j])
+                t2 = conj(α * x[j])
+                for i=1:j-1
+                    A[i,j] += x[i] * t1 + y[i] * t2
+                end
+                A[j,j] = real(A[j,j]) + real(x[j] * t1 + y[j] * t2)
+            end
+        end
+    end
+    function rank2update!(A::StridedMatrix, α::Number, x::AbstractVector, y::AbstractVector, ::Val{:L})
+        n = length(x)
+        for j=1:n
+            if iszero(x[j]) && iszero(y[j])
+                A[j,j] = real(A[j,j])
+            else
+                t1 = α * conj(y[j])
+                t2 = conj(α * x[j])
+                A[j,j] = real(A[j,j]) + real(x[j] * t1 + y[j] * t2)
+                for i=j+1:n
+                    A[i,j] += x[i] * t1 + y[i] * t2
+                end
+            end
+        end
+    end
+
 using LinearAlgebra: QRPackedQ
 function _materializeQ(H::Hessenberg{T}) where {T}
+    H.uplo == 'L' || throw(ArgumentError("only implemented for uplo='L'"))
     A = copy(H.Q.factors)
     n = checksquare(A)
     # shift reflectors one column rightwards
@@ -71,4 +183,4 @@ end
 
 end # v1.3+ branch
 
-LinearAlgebra.hessenberg!(A::StridedMatrix) = _hessenberg!(A)
+LinearAlgebra.hessenberg!(A::StridedMatrix{T}) where T <: Union{Real, Complex} = _hessenberg!(A)
