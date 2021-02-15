@@ -32,6 +32,7 @@ function godunov(T)
     A,vals,econd
 end
 
+include("symtridiag.jl")
 include("complex.jl")
 include("balance.jl")
 include("real.jl")

@@ -85,10 +85,10 @@ end
                 A[i+1, i+1] = real(A[i+1, i+1])
             end
             A[i+1, i] = e[i]
-            d[i] = A[i,i]
+            d[i] = real(A[i,i])
             τ[i] = τi
         end
-        d[n] = A[n,n]
+        d[n] = real(A[n,n])
         return Hessenberg(A, τ, SymTridiagonal(d, e), Ah.uplo)
     end
 
@@ -107,7 +107,7 @@ end
             xi[2:i] .= A[1:i-1,i+1]
             ξ = view(xi,1:i)
             τi = _reflector!(ξ)
-            e[i] = xi[1]
+            e[i] = real(xi[1])
             A[1:i-1,i+1] .= xi[2:i]
             if !iszero(τi)
                 A[i,i+1] = one(T)
@@ -124,10 +124,10 @@ end
                 A[i, i] = real(A[i, i])
             end
             A[i, i+1] = e[i]
-            d[i+1] = A[i+1,i+1]
+            d[i+1] = real(A[i+1,i+1])
             τ[i] = τi
         end
-        d[1] = A[1,1]
+        d[1] = real(A[1,1])
         return Hessenberg(A, τ, SymTridiagonal(d, e), Ah.uplo)
     end
 
@@ -164,6 +164,14 @@ end
 
 using LinearAlgebra: QRPackedQ
 function _materializeQ(H::Hessenberg{T}) where {T}
+    if H.uplo == 'L'
+        return _materializeQ(H, Val(:L))
+    else
+        return _materializeQ(H, Val(:U))
+    end
+end
+
+function _materializeQ(H::Hessenberg{T}, ::Val{:L}) where {T}
     H.uplo == 'L' || throw(ArgumentError("only implemented for uplo='L'"))
     A = copy(H.Q.factors)
     n = checksquare(A)
@@ -181,6 +189,50 @@ function _materializeQ(H::Hessenberg{T}) where {T}
     A
 end
 
+# alas, stdlib has no QLPackedQ
+function _materializeQ(H::Hessenberg{T},::Val{:U}) where {T}
+    H.uplo == 'U' || throw(ArgumentError("only implemented for uplo='U'"))
+    A = copy(H.Q.factors)
+    n = checksquare(A)
+    # shift reflectors one column leftwards
+    @inbounds for j in 1:n-1
+        for i in 1:j-1
+            A[i,j] = A[i,j+1]
+        end
+        A[j:n,j] .= zero(T)
+    end
+    A[1:n-1,n] .= zero(T)
+    A[n,n] = one(T)
+    w = zeros(T,n-1)
+    for i in 1:n-1
+        A[i,i] = one(T)
+        τi = H.τ[i]
+        v = view(A,1:i,i)
+        # w = A[1:i,1:i-1]' * v
+        for j in 1:i-1
+            w[j] = dot(view(A, 1:i, j), v)
+        end
+        # A[1:i,1:i-1] .-= τi * v * w'
+        for j in 1:i-1
+            t = τi * w[j]'
+            for k in 1:i
+                A[k,j] -= v[k] * t
+            end
+        end
+        A[1:i-1, i] *= -τi
+        A[i,i] = one(T) - τi
+        A[i+1:n,i] .= zero(T)
+    end
+    A
+end
+
 end # v1.3+ branch
 
 LinearAlgebra.hessenberg!(A::StridedMatrix{T}) where T <: Union{Real, Complex} = _hessenberg!(A)
+using LinearAlgebra: RealHermSymComplexHerm
+# this should be S <: StridedMatrix, but for stdlib foolishness
+function LinearAlgebra.hessenberg!(Ah::RealHermSymComplexHerm{T,S}
+         ) where {T <: Union{AbstractFloat, Complex{AbstractFloat}}, S <: AbstractMatrix}
+    _hehessenberg!(Ah, Val(Symbol(Ah.uplo)))
+end
+

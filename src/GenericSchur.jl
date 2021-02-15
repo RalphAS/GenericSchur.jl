@@ -106,6 +106,30 @@ function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
     end
 end
 
+using LinearAlgebra: RealHermSymComplexHerm, Algorithm, QRIteration
+
+function geigen!(A::RealHermSymComplexHerm{T, <:StridedMatrix},
+                 alg::Algorithm = QRIteration();
+                 sortby::Union{Function,Nothing}=eigsortby
+                 ) where T <: Union{AbstractFloat, Complex{AbstractFloat}}
+    H = hessenberg!(A)
+    V = _materializeQ(H)
+    S = gschur!(H, V, alg)
+    λ = S.values
+    LinearAlgebra.Eigen(sorteig!(λ, V, eigsortby)...)
+end
+function geigen!(A::RealHermSymComplexHerm{T, <:StridedMatrix},
+                 irange::UnitRange,
+                 alg::Algorithm = QRIteration; kwargs...
+                 ) where T <: Union{AbstractFloat, Complex{AbstractFloat}}
+    throw(ArgumentError("eigenvalue selection is not implemented for $alg"))
+end
+function geigen!(A::RealHermSymComplexHerm{T, <:StridedMatrix},
+                 vl::Real, vu::Real,
+                 alg::Algorithm = QRIteration; kwargs...
+                 ) where T <: Union{AbstractFloat, Complex{AbstractFloat}}
+    throw(ArgumentError("eigenvalue selection is not implemented for $alg"))
+end
 ############################################################################
 # Internal implementation follows
 
@@ -860,6 +884,8 @@ end
 
 include("vectors.jl")
 include("triang.jl")
+
+include("symtridiag.jl")
 
 include("norm1est.jl")
 include("sylvester.jl")
