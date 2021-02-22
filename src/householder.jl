@@ -1,5 +1,5 @@
 import Base: *, eltype, size
-import LinearAlgebra: adjoint, mul!, rmul!
+import LinearAlgebra: adjoint, mul!, rmul!, lmul!
 
 # The reflector! code in stdlib has no underflow or accuracy protection
 

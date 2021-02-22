@@ -5,13 +5,13 @@
 
 import LinearAlgebra: _ordschur!, _ordschur
 
-function _ordschur(T::StridedMatrix{Ty},
+function LinearAlgebra._ordschur(T::StridedMatrix{Ty},
                     Z::StridedMatrix{Ty},
                    select::Union{Vector{Bool},BitVector}) where Ty <: Complex
     _ordschur!(copy(T), copy(Z), select)
 end
 
-function _ordschur!(T::StridedMatrix{Ty},
+function LinearAlgebra._ordschur!(T::StridedMatrix{Ty},
                     Z::StridedMatrix{Ty},
                     select::Union{Vector{Bool},BitVector}) where Ty <: Complex
     # suppress most checks since this is an internal function expecting
@@ -121,15 +121,17 @@ function subspacesep(S::Schur{Ty}, nsub) where Ty
     return scale / est
 end
 
-function _ordschur(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
-                   Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
-                   select::Union{Vector{Bool},BitVector}) where Ty <: Complex
+function LinearAlgebra._ordschur(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+                                 Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
+                                 select::Union{Vector{Bool},BitVector}
+                                 ) where Ty <: Complex{Tr} where Tr <: AbstractFloat
     _ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
 end
 
-function _ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+function LinearAlgebra._ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
                     Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
-                    select::Union{Vector{Bool},BitVector}) where Ty <: Complex
+                    select::Union{Vector{Bool},BitVector}
+                    ) where Ty <: Complex{Tr} where Tr <: AbstractFloat
     n = size(S,1)
     ks = 0
     for k=1:n

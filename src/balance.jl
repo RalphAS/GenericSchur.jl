@@ -30,7 +30,7 @@ are encoded into `B` so that they can be inverted for eigenvectors, etc.
 Balancing typically improves the accuracy of eigen-analysis.
 """
 function balance!(A::AbstractMatrix{T}; scale=true, permute=true,
-                  p::Int=1, algo = :pr) where T
+                  p::Int=1, algo = :pr) where T <: STypes
     n = checksquare(A)
     RT = real(T)
     β = RT(2)
@@ -192,7 +192,7 @@ end
 
 # this is the appropriate transformation for right eigenvectors
 # stored as columns of a matrix
-function lmul!(B::Balancer, A::StridedMatrix{T}) where T
+function LinearAlgebra.lmul!(B::Balancer, A::StridedMatrix{T}) where T
     n = checksquare(A)
     if B.trivial
         return A
@@ -224,7 +224,7 @@ end
 
 # this should be the appropriate transformation for left eigenvectors
 # stored as columns of a matrix
-function ldiv!(B::Balancer, A::StridedMatrix{T}) where T
+function LinearAlgebra.ldiv!(B::Balancer, A::StridedMatrix{T}) where T
     n = checksquare(A)
     if B.trivial
         return A

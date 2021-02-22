@@ -13,9 +13,11 @@ import LinearAlgebra: schur!, eigvals!, eigvecs, eigen!
 # These are introduced here.
 export triangularize, eigvalscond, subspacesep, balance!
 
-schur!(A::StridedMatrix{T}; kwargs...) where {T} = gschur!(A; kwargs...)
+STypes = Union{AbstractFloat, Complex{<:AbstractFloat}}
 
-function eigvals!(A::StridedMatrix{T}; kwargs...) where {T}
+schur!(A::StridedMatrix{T}; kwargs...) where {T <: STypes} = gschur!(A; kwargs...)
+
+function eigvals!(A::StridedMatrix{T}; kwargs...) where {T <: STypes}
     S = gschur!(A; wantZ=false, kwargs...)
     S.values
 end
@@ -29,7 +31,7 @@ Eigenvectors are returned as columns of a matrix.
 The returned eigenvectors have unit Euclidean norm, and the largest
 elements are real.
 """
-function eigvecs(S::Schur{T}; left::Bool=false) where {T <: Complex}
+function eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFloat}
     if left
         v = _gleigvecs!(S.T,S.Z)
     else
@@ -46,7 +48,7 @@ else
 end
 
 function eigen!(A::StridedMatrix{T}; permute=true, scale=true,
-                sortby::Union{Function,Nothing}=eigsortby) where {T <: Real}
+                sortby::Union{Function,Nothing}=eigsortby) where {T <: AbstractFloat}
     if permute || scale
         A, B = balance!(A, scale=scale, permute=permute)
     end
@@ -63,8 +65,9 @@ function eigen!(A::StridedMatrix{T}; permute=true, scale=true,
     end
 end
 
-function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
-                sortby::Union{Function,Nothing}=eigsortby) where {T <: Complex}
+function eigen!(A::StridedMatrix{Complex{T}}; permute::Bool=true, scale::Bool=true,
+                sortby::Union{Function,Nothing}=eigsortby
+                ) where {T <: AbstractFloat}
     if permute || scale
         A, B = balance!(A, scale=scale, permute=permute)
     end
@@ -100,25 +103,29 @@ else
     end
 end
 
+function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
                  alg::Algorithm = QRIteration();
                  sortby::Union{Function,Nothing}=eigsortby
-                 ) where T <: Union{AbstractFloat, Complex{AbstractFloat}}
+                 )
     H = hessenberg!(A)
     V = _materializeQ(H)
     S = gschur!(H, V, alg)
     λ = S.values
     LinearAlgebra.Eigen(sorteig!(λ, V, eigsortby)...)
 end
-function geigen!(A::RealHermSymComplexHerm{T, <:StridedMatrix},
+
+# fallback methods; only some algorithms have selection capability
+
+function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
                  irange::UnitRange,
                  alg::Algorithm = QRIteration; kwargs...
-                 ) where T <: Union{AbstractFloat, Complex{AbstractFloat}}
+                 )
     throw(ArgumentError("eigenvalue selection is not implemented for $alg"))
 end
-function geigen!(A::RealHermSymComplexHerm{T, <:StridedMatrix},
+function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
                  vl::Real, vu::Real,
                  alg::Algorithm = QRIteration; kwargs...
-                 ) where T <: Union{AbstractFloat, Complex{AbstractFloat}}
+                 )
     throw(ArgumentError("eigenvalue selection is not implemented for $alg"))
 end
 
@@ -156,10 +163,11 @@ include("balance.jl")
 # Univ. of California Berkeley
 # Univ. of Colorado Denver
 # NAG Ltd.
-function gschur!(H::HessenbergArg{T}, Z=nothing;
+function gschur!(H::HessenbergArg{Complex{RT}}, Z=nothing;
                   maxiter = 100*size(H, 1), maxinner = 30*size(H, 1),
                   checksd=true, kwargs...
-                 ) where {T <: Complex}
+                 ) where {RT <: AbstractFloat}
+    T = Complex{RT}
     n = size(H, 1)
     istart = 1
     iend = n
@@ -172,7 +180,6 @@ function gschur!(H::HessenbergArg{T}, Z=nothing;
         end
     end
 
-    RT = real(T)
     ulp = eps(RT)
     smallnum = safemin(RT) * (n / ulp)
     rzero = zero(RT)
@@ -245,7 +252,7 @@ function gschur!(H::HessenbergArg{T}, Z=nothing;
             end
 
             # select shift
-            # logic adapted from LAPACK zlahqr
+            # exceptional shift logic adapted from LAPACK zlahqr
             if its % 30 == 10
                 s = threeq * abs(real(HH[istart+1,istart]))
                 t = s + HH[istart,istart]
@@ -294,8 +301,8 @@ gschur!(A::StridedMatrix) -> F::Schur
 
 Destructive version of `gschur` (q.v.).
 """
-function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
-                 kwargs...) where T <: Complex
+function gschur!(A::StridedMatrix{Complex{T}}; wantZ::Bool=true, scale::Bool=true,
+                 kwargs...) where T <: AbstractFloat
     n = checksquare(A)
     if scale
         scaleA, cscale, anrm = _scale!(A)
@@ -466,7 +473,7 @@ If `Z` is provided, it is updated with the unitary transformations of the decomp
 function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
                   tol = eps(real(T)),
                   maxiter = 100*size(H, 1), standardize = nothing,
-                  kwargs...) where {T <: Real}
+                  kwargs...) where {T <: AbstractFloat}
     if !(standardize === nothing)
         @warn "obsolete keyword `standardize` in gschur!" maxlog=1
     end
@@ -742,7 +749,7 @@ function _gs2x2!(H2::StridedMatrix{T},jj) where {T <: Real}
 end
 
 function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
-                 kwargs...) where {T <: Real}
+                 kwargs...) where {T <: AbstractFloat}
     n = checksquare(A)
     if scale
         scaleA, cscale, anrm = _scale!(A)

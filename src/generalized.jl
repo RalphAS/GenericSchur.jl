@@ -11,7 +11,8 @@ using LinearAlgebra: givensAlgorithm
 
 # decomposition is A = Q S Z', B = Q  Tmat Z'
 
-function schur!(A::StridedMatrix{T}, B::StridedMatrix{T}; kwargs...) where {T<:Complex}
+function schur!(A::StridedMatrix{Complex{T}}, B::StridedMatrix{Complex{T}}; kwargs...
+                ) where {T<:AbstractFloat}
     ggschur!(A, B; kwargs...)
 end
 
@@ -450,7 +451,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     return α, β, H, B, Q, Z
 end
 
-function eigvecs(S::GeneralizedSchur, left=false)
+function eigvecs(S::GeneralizedSchur{Complex{T}}, left=false) where {T <: AbstractFloat}
     left && throw(ArgumentError("not implemented"))
     v = _geigvecs(S.S, S.T, S.Z)
     # CHECKME: Euclidean norm differs from LAPACK, so wait for upstream.

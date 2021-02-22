@@ -228,11 +228,11 @@ end
 
 end # v1.3+ branch
 
-LinearAlgebra.hessenberg!(A::StridedMatrix{T}) where T <: Union{Real, Complex} = _hessenberg!(A)
+LinearAlgebra.hessenberg!(A::StridedMatrix{<: STypes}) = _hessenberg!(A)
+
 using LinearAlgebra: RealHermSymComplexHerm
 # this should be S <: StridedMatrix, but for stdlib foolishness
-function LinearAlgebra.hessenberg!(Ah::RealHermSymComplexHerm{T,S}
-         ) where {T <: Union{AbstractFloat, Complex{AbstractFloat}}, S <: AbstractMatrix}
+function LinearAlgebra.hessenberg!(Ah::RealHermSymComplexHerm{<: STypes, <: AbstractMatrix})
     _hehessenberg!(Ah, Val(Symbol(Ah.uplo)))
 end
 

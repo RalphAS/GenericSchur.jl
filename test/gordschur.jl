@@ -103,9 +103,10 @@ function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol=10) where {Ty<:Complex}
     # we extend the LinearAlgebra function, but want to test
     # our version with BLAS types:
     S2,T2,a,b,Q2,Z2 = invoke(LinearAlgebra._ordschur!,
-                           Tuple{StridedMatrix{T}, StridedMatrix{T},
-                           StridedMatrix{T}, StridedMatrix{T},
-                           Union{Vector{Bool},BitVector}} where T <: Complex,
+                             Tuple{StridedMatrix{T}, StridedMatrix{T},
+                                   StridedMatrix{T}, StridedMatrix{T},
+                                   Union{Vector{Bool},BitVector}}
+                             where T <: Complex{Tr} where Tr <: AbstractFloat,
                            S2,T2,Q2,Z2,select)
 
     # usual tests for Schur
