@@ -1,21 +1,16 @@
 module GenericSchur
 using LinearAlgebra
-using LinearAlgebra: Givens, Rotation
-using Printf
-import LinearAlgebra: lmul!, mul!, checksquare, ldiv!
-if VERSION >= v"1.2"
-    using Base: require_one_based_indexing
-else
-    function require_one_based_indexing(A::AbstractArray)
-        if Base.has_offset_axes(A)
-            throw(ArgumentError("offset axes are not supported"))
-        end
-    end
-end
 
-# This is the public interface of the package.
-# Wrappers like `schur` and `eigvals` should just work.
+# This is the main public interface of the package.
+# We extend these functions without further note.
 import LinearAlgebra: schur!, eigvals!, eigvecs, eigen!
+
+# Wrappers like `schur` and `eigvals` should just work.
+
+# Some other stdlib functions (e.g., lmul!) are extended, but either non-piratically
+# or with explicit qualification.
+
+# These are introduced here.
 export triangularize, eigvalscond, subspacesep, balance!
 
 schur!(A::StridedMatrix{T}; kwargs...) where {T} = gschur!(A; kwargs...)
@@ -42,26 +37,6 @@ function eigvecs(S::Schur{T}; left::Bool=false) where {T <: Complex}
     end
     _enormalize!(v)
     v
-end
-function _enormalize!(v::AbstractMatrix{T}) where T
-    n = size(v,1)
-    for j=1:n
-        s = one(real(T)) / norm(v[:,j],2)
-        t = abs2(v[1,j])
-        i0 = 1
-        for i=2:n
-            u = abs2(v[i,j])
-            if  u > t
-                i0 = i
-                t = u
-            end
-        end
-        t = s * conj(v[i0,j]) / sqrt(t)
-        for i=1:n
-            v[i,j] *=  t
-        end
-        v[i0,j] = real(v[i0,j])
-    end
 end
 
 if VERSION < v"1.2-"
@@ -109,6 +84,22 @@ end
 using LinearAlgebra: RealHermSymComplexHerm, Algorithm, QRIteration
 
 function geigen!(A::RealHermSymComplexHerm{T, <:StridedMatrix},
+############################################################################
+# Internal implementations follow
+
+using LinearAlgebra: Givens, Rotation, checksquare
+using Printf
+
+if VERSION >= v"1.2"
+    using Base: require_one_based_indexing
+else
+    function require_one_based_indexing(A::AbstractArray)
+        if Base.has_offset_axes(A)
+            throw(ArgumentError("offset axes are not supported"))
+        end
+    end
+end
+
                  alg::Algorithm = QRIteration();
                  sortby::Union{Function,Nothing}=eigsortby
                  ) where T <: Union{AbstractFloat, Complex{AbstractFloat}}
@@ -130,9 +121,8 @@ function geigen!(A::RealHermSymComplexHerm{T, <:StridedMatrix},
                  ) where T <: Union{AbstractFloat, Complex{AbstractFloat}}
     throw(ArgumentError("eigenvalue selection is not implemented for $alg"))
 end
-############################################################################
-# Internal implementation follows
 
+# debugging stuff
 macro mydebug(expr); nothing; end
 
 function _fmt_nr(z::Complex)

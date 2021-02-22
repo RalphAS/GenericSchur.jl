@@ -506,3 +506,24 @@ function _hypot3(x::T, y::T, z::T) where {T}
     r::real(T) = w * sqrt((rw * xa)^2 + (rw * ya)^2 + (rw * za)^2)
     return r
 end
+
+function _enormalize!(v::AbstractMatrix{T}) where T <: STypes
+    n = size(v,1)
+    for j=1:n
+        s = one(real(T)) / norm(v[:,j],2)
+        t = abs2(v[1,j])
+        i0 = 1
+        for i=2:n
+            u = abs2(v[i,j])
+            if  u > t
+                i0 = i
+                t = u
+            end
+        end
+        t = s * conj(v[i0,j]) / sqrt(t)
+        for i=1:n
+            v[i,j] *=  t
+        end
+        v[i0,j] = real(v[i0,j])
+    end
+end
