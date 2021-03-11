@@ -1,5 +1,3 @@
-using LinearAlgebra: Algorithm, QRIteration
-
 function gschur!(H::Hessenberg{Tq, S}, Z=Matrix(H.Q), alg=QRIteration(); kwargs...
                  ) where {S <: SymTridiagonal{T}} where {Tq, T <: Real}
     _gschur!(H.H, alg, Z; kwargs...)
@@ -15,7 +13,6 @@ function gschur!(H::Hessenberg{Tq, S}, Z=Matrix(H.Q), alg=QRIteration(); kwargs.
     return Schur(Tschur, Z, v)
 end
 
-using LinearAlgebra: eigsortby, sorteig!
 function geigen!(A::SymTridiagonal{T}, alg=QRIteration()) where T <: AbstractFloat
     n = length(A.dv)
     V = Matrix{T}(I,n,n)
