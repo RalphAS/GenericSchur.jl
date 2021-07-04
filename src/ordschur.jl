@@ -53,7 +53,7 @@ function _trexchange!(T,Z,iold,inew)
             lmul!(G,T)
         end
         rmul!(T,adjoint(G))
-        Z === nothing || rmul!(Z,adjoint(G))
+        isempty(Z) || rmul!(Z,adjoint(G))
     end
 end
 

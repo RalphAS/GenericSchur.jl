@@ -48,7 +48,8 @@ else
 end
 
 function eigen!(A::StridedMatrix{T}; permute=true, scale=true,
-                sortby::Union{Function,Nothing}=eigsortby) where {T <: AbstractFloat}
+                sortby::Union{Function,Nothing}=eigsortby, kwargs...
+                ) where {T <: AbstractFloat}
     if permute || scale
         A, B = balance!(A, scale=scale, permute=permute)
     end
@@ -66,21 +67,73 @@ function eigen!(A::StridedMatrix{T}; permute=true, scale=true,
 end
 
 function eigen!(A::StridedMatrix{Complex{T}}; permute::Bool=true, scale::Bool=true,
-                sortby::Union{Function,Nothing}=eigsortby
+                sortby::Union{Function,Nothing}=eigsortby, kwargs...
                 ) where {T <: AbstractFloat}
     if permute || scale
         A, B = balance!(A, scale=scale, permute=permute)
     end
     S = schur(A)
-    v = _geigvecs!(S.T,S.Z)
-    if permute || scale
-        lmul!(B, v)
+    if isempty(kwargs)
+        v = _geigvecs!(S.T,S.Z)
+        if permute || scale
+            lmul!(B, v)
+        end
+        _enormalize!(v)
+        if sortby !== nothing
+            return LinearAlgebra.Eigen(sorteig!(S.values, v, sortby)...)
+        else
+            return LinearAlgebra.Eigen(S.values,v)
+        end
     end
-    _enormalize!(v)
-    if sortby !== nothing
-        return LinearAlgebra.Eigen(sorteig!(S.values, v, sortby)...)
+    do_vr = get(kwargs, :jvr, true)
+    if do_vr
+        v = _geigvecs!(S.T,S.Z)
+        if permute || scale
+            lmul!(B, v)
+        end
+        _enormalize!(v)
     else
-        return LinearAlgebra.Eigen(S.values,v)
+        v = zeros(Complex{T},0,0)
+    end
+    do_vl = get(kwargs, :jvl, false)
+    if do_vl
+        vl = _gleigvecs!(S.T,S.Z)
+        if permute || scale
+            ldiv!(B, vl)
+        end
+        _enormalize!(vl)
+    else
+        vl = zeros(Complex{T},0,0)
+    end
+    do_econd = get(kwargs, :jce, false)
+    do_vcond = get(kwargs, :jcv, false)
+    if do_econd || do_vcond
+        Ttmp = similar(S.T)
+        n = length(S.values)
+        sel = falses(n)
+        rconde = zeros(T, do_econd ? n : 0)
+        rcondv = zeros(T, do_vcond ? n : 0)
+        for j in 1:n
+            copyto!(Ttmp, S.T)
+            Stmp = Schur(Ttmp,similar(S.Z,0,0),copy(S.values))
+            sel[j] = true
+            ordschur!(Stmp,sel)
+            sel[j] = false
+            if do_econd
+                rconde[j] = eigvalscond(Stmp,1)
+            end
+            if do_vcond
+                rcondv[j] = subspacesep(Stmp,1)
+            end
+        end
+    else
+        rconde = zeros(T,0)
+        rcondv = zeros(T,0)
+    end
+    if sortby !== nothing
+        return LinearAlgebra.Eigen(sorteig!(S.values, v, sortby, vl, rconde, rcondv)...)
+    else
+        return LinearAlgebra.Eigen(S.values,v,vl,false,rconde,rcondv)
     end
 end
 

@@ -77,4 +77,40 @@ let T = Complex{BigFloat}
     end
 end
 
+# CHECKME: we should not need to be so lenient,
+# but this is sufficient for legitimate applications.
+function _chkrcond(x,y,tiny=1e3*eps(eltype(x)))
+    ok = true
+    for (xi,yi) in zip(x,y)
+        x1 = clamp(xi,0,1)
+        y1 = clamp(yi,0,1)
+        if abs(x1 - y1) > 0.5 * abs(y1) + tiny
+            ok = false
+        end
+    end
+    return ok
+end
+
+if VERSION > v"1.7.0-DEV.976"
+    for T in (Complex{BigFloat},)
+        Tref = ComplexF64
+        @testset "extended eigen() $T" begin
+            n = 10
+            Aref = rand(Tref,n,n)
+            A = T.(Aref)
+            old = precision(real(T))
+            @assert old >= 53
+            Eref = eigen(Aref, jvl=true, jce=true, jcv=true)
+            setprecision(real(T), 53) do
+                E = eigen(A, jvl=true, jce=true, jcv=true)
+                @test E.values ≈ Eref.values
+                @test _chkrcond(E.rconde, Eref.rconde)
+                @test _chkrcond(E.rcondv, Eref.rcondv)
+                _chkeigvecs(Eref.vectors, E.vectors, false)
+                _chkeigvecs(Eref.vectorsl, E.vectorsl, false)
+            end
+        end
+    end
+end
+
 end # module
