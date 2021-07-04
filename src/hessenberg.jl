@@ -52,7 +52,7 @@ function _hessenberg!(A::StridedMatrix{T}) where T
 end
 
     function _hessenberg!(Ah::Union{Hermitian{T}, Symmetric{T}}) where T <: Real
-        _hehessenberg!(Ah, Val(Symbol(Ah.uplo)))
+        _hehessenberg!(Hermitian(Ah), Val(Symbol(Ah.uplo)))
     end
     function _hessenberg!(Ah::Hermitian{T})  where T <: Complex
         _hehessenberg!(Ah, Val(Symbol(Ah.uplo)))
@@ -233,6 +233,6 @@ LinearAlgebra.hessenberg!(A::StridedMatrix{<: STypes}) = _hessenberg!(A)
 using LinearAlgebra: RealHermSymComplexHerm
 # this should be S <: StridedMatrix, but for stdlib foolishness
 function LinearAlgebra.hessenberg!(Ah::RealHermSymComplexHerm{<: STypes, <: AbstractMatrix})
-    _hehessenberg!(Ah, Val(Symbol(Ah.uplo)))
+    _hehessenberg!(Hermitian(Ah), Val(Symbol(Ah.uplo)))
 end
 

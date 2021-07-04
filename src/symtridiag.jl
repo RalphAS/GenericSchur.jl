@@ -3,8 +3,11 @@ function gschur!(H::Hessenberg{Tq, S}, Z=Matrix(H.Q), alg=QRIteration(); kwargs.
     _gschur!(H.H, alg, Z; kwargs...)
     # aliasing might be a cruel trap, so don't.
     v = copy(H.H.dv)
-    n = length(v)
+    if Z === nothing
+        return Schur(zeros(Tq,0,0),zeros(Tq,0,0),v)
+    end
     # Schur form must have same type as Z
+    n = length(v)
     Tschur = similar(Z,n,n)
     fill!(Tschur, zero(eltype(Z)))
     @inbounds for j=1:n

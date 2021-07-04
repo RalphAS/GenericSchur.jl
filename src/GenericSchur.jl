@@ -139,6 +139,16 @@ function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
     LinearAlgebra.Eigen(sorteig!(λ, V, eigsortby)...)
 end
 
+function geigvals!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
+                 alg::Algorithm = QRIteration();
+                 sortby::Union{Function,Nothing}=eigsortby
+                 )
+    H = hessenberg!(A)
+    S = gschur!(H, nothing, alg)
+    λ = S.values
+    sorteig!(λ, sortby)
+end
+
 # fallback methods; only some algorithms have selection capability
 
 function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
