@@ -1,5 +1,7 @@
 module TGeig
 # routine tests for wrappers
+# This section is just to check existence and sanity of methods.
+# Serious accuracy verification is elsewhere.
 
 using LinearAlgebra
 using LinearAlgebra: sorteig!
@@ -10,7 +12,7 @@ using GenericSchur
 function _chkeigvecs(v1,v2::AbstractMatrix{T}, isnrml, sameorder=true) where T
     m,n = size(v2)
     if isnrml
-        @test norm(v2' * v2 - I) < 5 * n * eps(real(T))
+        @test norm(v2' * v2 - I) < 50 * n * eps(real(T))
     end
     tmat = v1' * v2
     zT = zero(real(T))
@@ -32,9 +34,9 @@ function _chkeigvecs(v1,v2::AbstractMatrix{T}, isnrml, sameorder=true) where T
                 end
             end
         end
-        ok = (abs(p1-1) < n * eps(real(T)))
+        ok = (abs(p1-1) < sqrt(eps(real(T))))
         if isnrml
-            ok &= (abs(p2) < n * eps(real(T)))
+            ok &= (abs(p2) < sqrt(eps(real(T))))
         end
         nok += ok
     end
