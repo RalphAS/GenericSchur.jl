@@ -47,32 +47,19 @@ else
     using LinearAlgebra: eigsortby, sorteig!
 end
 
-function eigen!(A::StridedMatrix{T}; permute=true, scale=true,
+function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
                 sortby::Union{Function,Nothing}=eigsortby, kwargs...
-                ) where {T <: AbstractFloat}
+                ) where {T <: STypes}
     if permute || scale
         A, B = balance!(A, scale=scale, permute=permute)
     end
-    S = triangularize(schur(A))
-    v = _geigvecs!(S.T,S.Z)
-    if permute || scale
-        lmul!(B, v)
-    end
-    _enormalize!(v)
-    if sortby !== nothing
-        return LinearAlgebra.Eigen(sorteig!(S.values, v, sortby)...)
+    if T <: Real
+        S = triangularize(schur(A))
+        VT = Complex{T}
     else
-        return LinearAlgebra.Eigen(S.values,v)
+        S = schur(A)
+        VT = T
     end
-end
-
-function eigen!(A::StridedMatrix{Complex{T}}; permute::Bool=true, scale::Bool=true,
-                sortby::Union{Function,Nothing}=eigsortby, kwargs...
-                ) where {T <: AbstractFloat}
-    if permute || scale
-        A, B = balance!(A, scale=scale, permute=permute)
-    end
-    S = schur(A)
     if isempty(kwargs)
         v = _geigvecs!(S.T,S.Z)
         if permute || scale
@@ -93,7 +80,7 @@ function eigen!(A::StridedMatrix{Complex{T}}; permute::Bool=true, scale::Bool=tr
         end
         _enormalize!(v)
     else
-        v = zeros(Complex{T},0,0)
+        v = zeros(VT,0,0)
     end
     do_vl = get(kwargs, :jvl, false)
     if do_vl
@@ -103,7 +90,7 @@ function eigen!(A::StridedMatrix{Complex{T}}; permute::Bool=true, scale::Bool=tr
         end
         _enormalize!(vl)
     else
-        vl = zeros(Complex{T},0,0)
+        vl = zeros(VT,0,0)
     end
     do_econd = get(kwargs, :jce, false)
     do_vcond = get(kwargs, :jcv, false)
@@ -111,8 +98,8 @@ function eigen!(A::StridedMatrix{Complex{T}}; permute::Bool=true, scale::Bool=tr
         Ttmp = similar(S.T)
         n = length(S.values)
         sel = falses(n)
-        rconde = zeros(T, do_econd ? n : 0)
-        rcondv = zeros(T, do_vcond ? n : 0)
+        rconde = zeros(real(T), do_econd ? n : 0)
+        rcondv = zeros(real(T), do_vcond ? n : 0)
         for j in 1:n
             copyto!(Ttmp, S.T)
             Stmp = Schur(Ttmp,similar(S.Z,0,0),copy(S.values))
@@ -127,8 +114,8 @@ function eigen!(A::StridedMatrix{Complex{T}}; permute::Bool=true, scale::Bool=tr
             end
         end
     else
-        rconde = zeros(T,0)
-        rcondv = zeros(T,0)
+        rconde = zeros(real(T),0)
+        rcondv = zeros(real(T),0)
     end
     if sortby !== nothing
         return LinearAlgebra.Eigen(sorteig!(S.values, v, sortby, vl, rconde, rcondv)...)
