@@ -1,4 +1,3 @@
-module TGeig
 # routine tests for wrappers
 # This section is just to check existence and sanity of methods.
 # Serious accuracy verification is elsewhere.
@@ -77,20 +76,22 @@ let T = Complex{BigFloat}
     end
 end
 
-# CHECKME: we should not need to be so lenient,
-# but this is sufficient for legitimate applications.
-function _chkrcond(x,y,tiny=1e3*eps(eltype(x)))
+function _chkrcond(x,y,rtol,atol=1e3*eps(eltype(x)))
     ok = true
     for (xi,yi) in zip(x,y)
         x1 = clamp(xi,0,1)
         y1 = clamp(yi,0,1)
-        if abs(x1 - y1) > 0.75 * abs(y1) + tiny
+        if abs(x1 - y1) > rtol * abs(y1) + atol
             ok = false
         end
     end
-    if !ok
-        @warn "rcond mismatch (trial, ref): "
-        display(hcat(x,y))
+    if (verbosity[] > 0 && !ok) || (verbosity[] > 1)
+        if !ok
+            @warn "rcond mismatch (trial, ref, ratio): "
+        else
+            @info "rcond comparison (trial, ref, ratio): "
+        end
+        display(hcat(x, y, x ./ y))
         println()
     end
     return ok
@@ -104,14 +105,27 @@ if VERSION > v"1.7.0-DEV.976"
             A = T.(Aref)
             old = precision(real(T))
             @assert old >= 53
-            Eref1 = eigen(Aref, jvl=true)
-            # some versions of OpenBLAS invert condition nrs for real matrices
-            Eref2 = eigen(Aref .+ 0im, jvl=true, jce=true, jcv=true)
+            if T <: Real
+                Eref1 = eigen(Aref .+ 0im, jvl=true)
+                # we convert to complex for condition nrs, so this is a fairer check
+                Eref2 = eigen(Aref .+ 0im, jvl=true, jce=true, jcv=true)
+            else
+                Eref1 = eigen(Aref, jvl=true, jce=true, jcv=true)
+                Eref2 = Eref1
+            end
             setprecision(real(T), 53) do
                 E = eigen(A, jvl=true, jce=true, jcv=true)
                 @test E.values ≈ Eref1.values
-                @test _chkrcond(E.rconde, Eref2.rconde)
-                @test _chkrcond(E.rcondv, Eref2.rcondv)
+                # stdlib inverts condition nrs for real matrices (WTF?)
+                # if we switch to the real forms, we would need this:
+                # rconde = (Tref <: Real) ? (1.0 ./ Eref1.rconde) : Eref1.rconde
+                # rcondv = (Tref <: Real) ? (1.0 ./ Eref1.rcondv) : Eref1.rcondv
+                rconde = Eref2.rconde
+                rcondv = Eref2.rcondv
+                @test _chkrcond(E.rconde, rconde, 0.1)
+                # CHECKME: we should not need to be so lenient,
+                # but this is sufficient for legitimate applications.
+                @test _chkrcond(E.rcondv, rcondv, 1.0)
                 _chkeigvecs(Eref1.vectors, E.vectors, false)
                 _chkeigvecs(Eref1.vectorsl, E.vectorsl, false)
             end
@@ -119,4 +133,3 @@ if VERSION > v"1.7.0-DEV.976"
     end
 end
 
-end # module

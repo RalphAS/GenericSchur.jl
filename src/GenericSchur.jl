@@ -46,10 +46,12 @@ if VERSION < v"1.2-"
 else
     using LinearAlgebra: eigsortby, sorteig!
 end
+using LinearAlgebra: checksquare
 
 function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
                 sortby::Union{Function,Nothing}=eigsortby, kwargs...
                 ) where {T <: STypes}
+    n = checksquare(A)
     if permute || scale
         A, B = balance!(A, scale=scale, permute=permute)
     end
@@ -72,34 +74,57 @@ function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
             return LinearAlgebra.Eigen(S.values,v)
         end
     end
-    do_vr = get(kwargs, :jvr, true)
+
+    # recip. cond. nr. needs both sets of eigvecs
+    # but compute it for BALANCED forms for consistency
+    do_vr = get(kwargs, :jvr, true) || get(kwargs, :jce, false)
     if do_vr
         v = _geigvecs!(S.T,S.Z)
+    else
+        v = zeros(VT,0,0)
+    end
+    do_vl = get(kwargs, :jvl, false) || get(kwargs, :jce, false)
+    if do_vl
+        vl = _gleigvecs!(S.T,S.Z)
+    else
+        vl = zeros(VT,0,0)
+    end
+
+    do_econd = get(kwargs, :jce, false)
+    rconde = zeros(real(T), do_econd ? n : 0)
+    if do_econd
+        for j in 1:n
+            vlj = view(vl,:,j)
+            vrj = view(v,:,j)
+            rconde[j] = abs(dot(vlj,vrj)) / norm(vlj) / norm(vrj)
+        end
+        if !get(kwargs, :jvr, true)
+            v = zeros(VT,0,0)
+        end
+        if !get(kwargs, :jvl, true)
+            vl = zeros(VT,0,0)
+        end
+    end
+
+    if get(kwargs, :jvr, true)
         if permute || scale
             lmul!(B, v)
         end
         _enormalize!(v)
-    else
-        v = zeros(VT,0,0)
     end
-    do_vl = get(kwargs, :jvl, false)
-    if do_vl
-        vl = _gleigvecs!(S.T,S.Z)
+    if get(kwargs, :jvl, true)
         if permute || scale
             ldiv!(B, vl)
         end
         _enormalize!(vl)
-    else
-        vl = zeros(VT,0,0)
     end
-    do_econd = get(kwargs, :jce, false)
+
     do_vcond = get(kwargs, :jcv, false)
-    if do_econd || do_vcond
+    rcondv = zeros(real(T), do_vcond ? n : 0)
+    if do_vcond
+        # warning: this is very expensive
         Ttmp = similar(S.T)
-        n = length(S.values)
         sel = falses(n)
-        rconde = zeros(real(T), do_econd ? n : 0)
-        rcondv = zeros(real(T), do_vcond ? n : 0)
         for j in 1:n
             copyto!(Ttmp, S.T)
             Stmp = Schur(Ttmp,similar(S.Z,0,0),copy(S.values))
@@ -113,9 +138,6 @@ function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
                 rcondv[j] = subspacesep(Stmp,1)
             end
         end
-    else
-        rconde = zeros(real(T),0)
-        rcondv = zeros(real(T),0)
     end
     if sortby !== nothing
         return LinearAlgebra.Eigen(sorteig!(S.values, v, sortby, vl, rconde, rcondv)...)
@@ -155,7 +177,7 @@ end
 ############################################################################
 # Internal implementations follow
 
-using LinearAlgebra: Givens, Rotation, checksquare
+using LinearAlgebra: Givens, Rotation
 using Printf
 
 if VERSION >= v"1.2"
