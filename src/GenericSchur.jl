@@ -15,11 +15,24 @@ export triangularize, eigvalscond, subspacesep, balance!
 
 STypes = Union{AbstractFloat, Complex{<:AbstractFloat}}
 
+if VERSION < v"1.2-"
+    eigsortby = nothing
+else
+    using LinearAlgebra: eigsortby, sorteig!
+end
+using LinearAlgebra: checksquare
+
 schur!(A::StridedMatrix{T}; kwargs...) where {T <: STypes} = gschur!(A; kwargs...)
 
-function eigvals!(A::StridedMatrix{T}; kwargs...) where {T <: STypes}
+function eigvals!(A::StridedMatrix{T};
+                  sortby::Union{Function,Nothing}=eigsortby, kwargs...
+                  ) where {T <: STypes}
     S = gschur!(A; wantZ=false, kwargs...)
-    S.values
+    if sortby !== nothing
+        return sorteig!(S.values, sortby)
+    else
+        return S.values
+    end
 end
 
 # This is probably the best we can do unless LinearAlgebra coöperates
@@ -27,7 +40,7 @@ end
     eigvecs(S::Schur{<:Complex}; left=false) => Matrix
 
 Compute right or left eigenvectors from a Schur decomposition.
-Eigenvectors are returned as columns of a matrix.
+Eigenvectors are returned as columns of a matrix, ordered to match `S.values`.
 The returned eigenvectors have unit Euclidean norm, and the largest
 elements are real.
 """
@@ -40,13 +53,6 @@ function eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFlo
     _enormalize!(v)
     v
 end
-
-if VERSION < v"1.2-"
-    eigsortby = nothing
-else
-    using LinearAlgebra: eigsortby, sorteig!
-end
-using LinearAlgebra: checksquare
 
 function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
                 sortby::Union{Function,Nothing}=eigsortby, kwargs...
