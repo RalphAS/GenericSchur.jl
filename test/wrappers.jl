@@ -116,7 +116,9 @@ function _chkrcond(x,y,rtol,atol=1e3*eps(eltype(x)))
     return ok
 end
 
-if VERSION > v"1.7.0-DEV.976"
+# This section tests compatibility with Julia PR #38483 which was reverted.
+# It should be rewritten but is kept to facilitate study of questionable cases.
+if ((VERSION > v"1.7.0-DEV.976") && (VERSION < v"1.7.0-beta3.37"))
     for (T,Tref) in ((Complex{BigFloat},ComplexF64),(BigFloat, Float64))
         @testset "extended eigen() $T" begin
             n = 10
