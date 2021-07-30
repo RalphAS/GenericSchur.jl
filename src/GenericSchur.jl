@@ -13,7 +13,7 @@ import LinearAlgebra: schur!, eigvals!, eigvecs, eigen!
 # These are introduced here.
 export triangularize, eigvalscond, subspacesep, balance!
 
-STypes = Union{AbstractFloat, Complex{<:AbstractFloat}}
+const STypes = Union{AbstractFloat, Complex{T} where T<:AbstractFloat}
 
 if VERSION < v"1.2-"
     eigsortby = nothing
@@ -37,7 +37,7 @@ end
 
 # This is probably the best we can do unless LinearAlgebra coöperates
 """
-    eigvecs(S::Schur{<:Complex}; left=false) => Matrix
+    eigvecs(S::Schur{Complex{<:AbstractFloat}}; left=false) -> Matrix
 
 Compute right or left eigenvectors from a Schur decomposition.
 Eigenvectors are returned as columns of a matrix, ordered to match `S.values`.
@@ -245,7 +245,6 @@ function _fmt_nr(x::Real)
 end
 
 include("util.jl")
-include("lapack_extras.jl")
 include("hessenberg.jl")
 
 if VERSION < v"1.3"
