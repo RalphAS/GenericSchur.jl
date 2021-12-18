@@ -3,7 +3,7 @@
 # Serious accuracy verification is elsewhere.
 
 using LinearAlgebra
-using LinearAlgebra: sorteig!
+using LinearAlgebra: sorteig!, eigsortby
 using Test
 using GenericSchur
 
@@ -58,11 +58,11 @@ let T = BigFloat
     for (w,f) in zip([:bare, :hermitian, :symmetric],[identity, Hermitian, Symmetric])
         @testset "wrappers $w $T" begin
             Awrk = f(A)
-            E = eigen(Awrk)
+            E = eigen(Awrk, sortby=eigsortby)
             @test norm(Awrk*E.vectors - E.vectors * Diagonal(E.values)) < sqrt(eps(T))
-            v = eigvecs(Awrk)
+            v = eigvecs(Awrk, sortby=eigsortby)
             _chkeigvecs(E.vectors, v, w != :bare)
-            λ = eigvals(Awrk)
+            λ = eigvals(Awrk, sortby=eigsortby)
             if (verbosity[] > 0) && (! (λ ≈ E.values))
                 @warn "eigval order comparison (eigvals, eigen, diff): "
                     display(hcat(λ, E.values, λ .- E.values))
@@ -80,11 +80,11 @@ let T = Complex{BigFloat}
     for (w,f) in zip([:bare, :hermitian],[identity, Hermitian])
         @testset "wrappers $w $T" begin
             Awrk = f(A)
-            E = eigen(Awrk)
+            E = eigen(Awrk, sortby=eigsortby)
             @test norm(Awrk*E.vectors - E.vectors * Diagonal(E.values)) < sqrt(eps(real(T)))
-            v = eigvecs(Awrk)
+            v = eigvecs(Awrk, sortby=eigsortby)
             _chkeigvecs(E.vectors, v, w != :bare)
-            λ = eigvals(Awrk)
+            λ = eigvals(Awrk, sortby=eigsortby)
             @test λ ≈ E.values
             if (verbosity[] > 0) && (! (λ ≈ E.values))
                 @warn "eigval order comparison (eigvals, eigen, diff): "

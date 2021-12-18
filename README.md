@@ -9,7 +9,7 @@
 [![GitHub CI Build Status](https://github.com/RalphAS/GenericSchur.jl/workflows/CI/badge.svg)](https://github.com/RalphAS/GenericSchur.jl/actions)
 [![codecov.io](http://codecov.io/github/RalphAS/GenericSchur.jl/coverage.svg?branch=master)](http://codecov.io/github/RalphAS/GenericSchur.jl?branch=master)
 
-## Schur decomposition of matrices with generic floating-point element types in Julia
+## Eigen-analysis of matrices with generic floating-point element types in Julia
 
 The Schur decomposition is the workhorse for eigensystem analysis of
 dense matrices. The diagonal eigen-decomposition of normal
