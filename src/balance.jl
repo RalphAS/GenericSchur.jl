@@ -30,7 +30,7 @@ are encoded into `B` so that they can be inverted for eigenvectors, etc.
 Balancing typically improves the accuracy of eigen-analysis.
 """
 function balance!(A::AbstractMatrix{T}; scale=true, permute=true,
-                  p::Int=1, algo = :pr) where T <: STypes
+                  p::Int=1, algo = :pr) where T <: Number
     n = checksquare(A)
     RT = real(T)
     β = RT(2)
