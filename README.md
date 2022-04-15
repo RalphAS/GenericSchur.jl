@@ -8,6 +8,7 @@
 ![Lifecycle](https://img.shields.io/badge/lifecycle-dormant-blue.svg) -->
 [![GitHub CI Build Status](https://github.com/RalphAS/GenericSchur.jl/workflows/CI/badge.svg)](https://github.com/RalphAS/GenericSchur.jl/actions)
 [![codecov.io](http://codecov.io/github/RalphAS/GenericSchur.jl/coverage.svg?branch=master)](http://codecov.io/github/RalphAS/GenericSchur.jl?branch=master)
+[![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://RalphAS.github.io/GenericSchur.jl/dev)
 
 ## Eigen-analysis of matrices with generic floating-point element types in Julia
 
