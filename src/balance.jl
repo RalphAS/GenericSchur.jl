@@ -19,13 +19,14 @@ end
 """
     balance!(A; scale=true, permute=true) => Abal, B::Balancer
 
-Balance a matrix so that various operations are more stable.
+Balance a square matrix so that various operations are more stable.
 
 If `permute`, then row and column permutations are found such
 that `Abal` has the block form `[T₁ X Y; 0 C Z; 0 0 T₂]` where
 `T₁` and `T₂` are upper-triangular.
 If `scale`, then a diagonal similarity transform using powers of 2
-is found such that the 1-norm of `Abal` is near unity. The transformations
+is found such that the 1-norm of the `C` block (or the whole of `Abal`,
+if not permuting) is near unity. The transformations
 are encoded into `B` so that they can be inverted for eigenvectors, etc.
 Balancing typically improves the accuracy of eigen-analysis.
 """
@@ -84,40 +85,43 @@ function balance!(A::AbstractMatrix{T}; scale=true, permute=true,
                 break
             end
         end
-        # look for column permutations which make the left portion UT
-        ilo = 0
-        @inbounds while ilo < n
-            ilo += 1
-            exch = false
-            ms = 0
-            js = 0
-            for j=ilo:ihi
-                js = j
-                exch = true
-                for i=ilo:ihi
-                    (i == j) && continue
-                    if A[i,j] != 0
-                        exch = false
+        # if ihi == 1, no more permutations
+        if ihi > 1
+            # look for column permutations which make the left portion UT
+            ilo = 0
+            @inbounds while ilo < n
+                ilo += 1
+                exch = false
+                ms = 0
+                js = 0
+                for j=ilo:ihi
+                    js = j
+                    exch = true
+                    for i=ilo:ihi
+                        (i == j) && continue
+                        if A[i,j] != 0
+                            exch = false
+                        end
+                    end
+                    if exch
+                        ms = ilo
+                        break
                     end
                 end
                 if exch
-                    ms = ilo
+                    sp[ms] = js
+                    if ms != js
+                        trivial = false
+                        for i=1:ihi
+                            A[i,js], A[i,ms] = A[i,ms], A[i,js]
+                        end
+                        for i=ilo:n
+                            A[js,i], A[ms,i] = A[ms,i], A[js,i]
+                        end
+                    end
+                else
                     break
                 end
-            end
-            if exch
-                sp[ms] = js
-                if ms != js
-                    trivial = false
-                    for i=1:ihi
-                        A[i,js], A[i,ms] = A[i,ms], A[i,js]
-                    end
-                    for i=ilo:n
-                        A[js,i], A[ms,i] = A[ms,i], A[js,i]
-                    end
-                end
-            else
-                break
             end
         end
     end

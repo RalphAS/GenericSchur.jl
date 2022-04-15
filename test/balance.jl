@@ -60,6 +60,39 @@ end
         @test A' * Vl ≈ Vl * diagm(0 => conj.(sb.values))
     end
 end
+@testset "balancing sanity" begin
+    for n1 in [0,1,2]
+        for n2 in [0,1,2]
+            for n3 in [0,1,2]
+                n = n1+n2+n3
+                n == 0 && continue
+                A1 = triu(rand(n1,n1))
+                A2 = rand(n2,n2)
+                A3 = triu(rand(n3,n3))
+                A = [A1 zeros(n1,n2+n3); zeros(n2,n1) A2 zeros(n2,n3); zeros(n3,n1+n2) A3]
+                Pc = zeros(n,n)
+                ic = randperm(n)
+                for i in 1:n
+                    Pc[i,ic[i]] = 1
+                end
+                Ax = Pc'*A*Pc
+                C,B = balance!(copy(Ax))
+                @test B.ilo <= B.ihi
+                nsubdiag = 0
+                for i in 1:n
+                    for j in 1:i-1
+                        if (i < B.ilo) || (j > B.ihi)
+                            if C[i,j] != 0
+                                nsubdiag += 1
+                            end
+                        end
+                    end
+                end
+                @test nsubdiag == 0
+            end # for n3
+        end
+    end
+end
 
 # This is a convenient place for other checks of the simple wrapper.
 # We shouldn't test StdLib code here, so no BlasFloat.
