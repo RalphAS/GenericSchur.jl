@@ -1,7 +1,4 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-GenericSchur = "cb0a519a-c446-11e8-32a1-43557240821e"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
-[compat]
-Documenter = "~0.21"

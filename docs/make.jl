@@ -1,14 +1,19 @@
 using Documenter, GenericSchur, LinearAlgebra
 
+DocMeta.setdocmeta!(GenericSchur, :DocTestSetup, :(using GenericicSchur); recursive=true)
+
 makedocs(
     modules = [GenericSchur],
-    format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == true),
     sitename = "GenericSchur.jl",
+    format=Documenter.HTML(;
+        prettyurls=get(ENV, "CI", "false") == "true",
+        canonical="https://RalphAS.github.io/GenericSchur.jl",
+        assets=String[],
+    ),
     pages = ["Overview" => "index.md",
              "Library" => "library.md"
              ]
 )
 
-# or maybe just the pkg site?
-deploydocs(repo = "github.com/RalphAS/GenericSchur.jl.git")
+deploydocs(repo = "github.com/RalphAS/GenericSchur.jl")
 
