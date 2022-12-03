@@ -40,13 +40,15 @@ else # version v1.3+
 function _hessenberg!(A::StridedMatrix{T}) where T
     n = LinearAlgebra.checksquare(A)
     τ = Vector{T}(undef, n - 1)
+    xwrk = Vector{T}(undef, n)
     for i = 1:n - 1
         xi = view(A, i + 1:n, i)
         t  = _reflector!(xi)
         H  = Householder{T,typeof(xi)}(view(A, i+2:n, i), t)
         τ[i] = H.τ
         lmul!(H', view(A, i + 1:n, i + 1:n))
-        rmul!(view(A, :, i + 1:n), H)
+        # rmul!(view(A, :, i + 1:n), H)
+        rmul!(view(A, :, i + 1:n), H, xwrk)
     end
     return Hessenberg(A, τ)
 end
@@ -171,6 +173,14 @@ function _materializeQ(H::Hessenberg{T}) where {T}
     end
 end
 
+function _materializeQ!(Q::AbstractMatrix, H::Hessenberg{T}, Zwrk) where {T}
+    if H.uplo == 'L'
+        return _materializeQ!(Q, H, Val(:L), Zwrk)
+    else
+        return _materializeQ!(Q, H, Val(:U), Zwrk)
+    end
+end
+
 function _materializeQ(H::Hessenberg{T}, ::Val{:L}) where {T}
     H.uplo == 'L' || throw(ArgumentError("only implemented for uplo='L'"))
     A = copy(H.Q.factors)
@@ -187,6 +197,35 @@ function _materializeQ(H::Hessenberg{T}, ::Val{:L}) where {T}
     Q1 = QRPackedQ(view(A,2:n,2:n), H.Q.τ)
     A[2:n,2:n] .= Matrix{T}(Q1)
     A
+end
+
+function _materializeQ!(Q, H::Hessenberg{T}, ::Val{:L}, Atmp) where {T}
+    H.uplo == 'L' || throw(ArgumentError("only implemented for uplo='L'"))
+    if Atmp != nothing
+        A = Atmp
+    else
+        A = similar(H.Q.factors)
+    end
+    copyto!(A, H.Q.factors)
+    n = checksquare(A)
+    nq = checksquare(Q)
+    nq == n || throw(ArgumentError("Q must have same size as factors in H"))
+    # shift reflectors one column rightwards
+    @inbounds for j in n:-1:2
+        A[1:j-1,j] .= zero(T)
+        for i in j+1:n
+            A[i,j] = A[i,j-1]
+        end
+    end
+    Q[2:n,1] .= zero(T)
+    Q[1,1] = one(T)
+    Q1 = QRPackedQ(view(A,2:n,2:n), H.Q.τ)
+    Q[2:n,2:n] .= zero(T)
+    @inbounds for j in 2:n
+        Q[j,j] = one(T)
+    end
+    lmul!(Q1, view(Q,2:n,2:n))
+    Q
 end
 
 # alas, stdlib has no QLPackedQ

@@ -71,7 +71,7 @@ function _gschur!(A::SymTridiagonal{T},
     ssfmin = sqrt(safmin) / eps2
 
     niter = 0
-    gvec = Vector{Givens}(undef, wantZ ? n : 0)
+    gvec = Vector{Givens{T}}(undef, wantZ ? n : 0)
 
     # Determine where matrix splits and choose QL or QR for each block,
     # according to whether top or bottom diagonal element is smaller.

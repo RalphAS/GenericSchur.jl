@@ -183,7 +183,7 @@ end
 ############################################################################
 # Internal implementations follow
 
-using LinearAlgebra: Givens, Rotation
+using LinearAlgebra: Givens
 using Printf
 
 if VERSION >= v"1.2"
@@ -287,6 +287,7 @@ function gschur!(H::HessenbergArg{Complex{RT}}, Z=nothing;
     rzero = zero(RT)
     half = 1 / RT(2)
     threeq = 3 / RT(4)
+    v2 = zeros(T,2)
 
     for j=1:n-1
         HH[j+2:n,j] .= zero(T)
@@ -382,7 +383,7 @@ function gschur!(H::HessenbergArg{Complex{RT}}, Z=nothing;
 
             # run a QR iteration
             # following zlahqr, only use single-shift
-            singleShiftQR!(HH, Z, t, istart, iend)
+            singleShiftQR!(HH, Z, t, istart, iend, v2)
 
         end # inner loop
     end # outer loop
@@ -425,7 +426,7 @@ function gschur!(A::StridedMatrix{Complex{T}}; wantZ::Bool=true, scale::Bool=tru
     S
 end
 
-function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer, iend::Integer) where {T <: Complex}
+function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer, iend::Integer, v) where {T <: Complex}
     n = size(HH, 1)
     ulp = eps(real(eltype(HH)))
 
@@ -450,7 +451,6 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
     h11s = zero(eltype(HH))
     h21 = zero(real(eltype(HH)))
     flag = false
-    v = zeros(T,2)
     @inbounds for mm = iend-1:-1:istart+1
         # determine the effect of starting the single-shift Francis
         # iteration at row mm: see if this would make HH[mm,mm-1] tiny.
@@ -574,7 +574,7 @@ If `Z` is provided, it is updated with the unitary transformations of the decomp
 """
 function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
                   tol = eps(real(T)),
-                  maxiter = 100*size(H, 1), standardize = nothing,
+                  maxiter = 100*size(H, 1), standardize::Union{Nothing,Bool} = nothing,
                   kwargs...) where {T <: AbstractFloat}
     if !(standardize === nothing)
         @warn "obsolete keyword `standardize` in gschur!" maxlog=1
@@ -587,7 +587,6 @@ function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
     iend = n
     HH = _getdata(H)
     triu!(HH,-1)
-    τ = Rotation(Givens{T}[])
     w = Vector{Complex{T}}(undef, n)
     iwcur = n
     function putw!(w,z)
@@ -598,6 +597,8 @@ function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
     smallnum = floatmin(T) * (n / eps(T))
     threeq = 3 / T(4)
     m7_16 = -7 / T(16)
+    v3 = zeros(T,3)
+    H2 = zeros(T,2,2)
 
     # iteration count
     iter = 0
@@ -720,7 +721,7 @@ function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
                     r1i, r2i = zero(T), zero(T)
                 end
             end
-            doubleShiftQR!(HH, Z, complex(r1r, r1i), complex(r2r, r2i), istart, iend)
+            doubleShiftQR!(HH, Z, complex(r1r, r1i), complex(r2r, r2i), istart, iend, v3)
         end
         if deflate && (istart >= iend)
             # if block size is one we deflate
@@ -730,13 +731,13 @@ function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
             @mydebug println("Deflate one. New iend is $iend. w=",_fmt_nr(thisw))
         elseif deflate && (istart + 1 == iend)
             # and the same for a 2x2 block
-            H2 = HH[iend-1:iend,iend-1:iend]
+            copyto!(H2, view(HH,iend-1:iend,iend-1:iend))
             G2,w1,w2 = _gs2x2!(H2,iend)
             putw!(w,w2)
             putw!(w,w1)
             lmul!(G2,view(HH,:,istart:n))
             rmul!(view(HH,1:iend,:),G2')
-            HH[iend-1:iend,iend-1:iend] .= H2 # clean
+            copyto!(view(HH,iend-1:iend,iend-1:iend), H2) # clean
             if iend > 2
                 HH[iend-1,iend-2] = 0
             end
@@ -750,7 +751,14 @@ function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
     end
 
     TT = triu(HH,-1)
-    return Schur{T,typeof(TT)}(TT, Z === nothing ? similar(TT,0,0) : Z, w)
+    return _schurtyped(TT, Z === nothing ? similar(TT,0,0) : Z, w)
+end
+
+# this should not be needed, but at some point it helped for type stability
+if VERSION < v"1.8"
+    @inline _schurtyped(T::TM,Z::TM,w::Tw) where {TM<:AbstractMatrix{Te},Tw} where {Te} = Schur{Te,TM}(T,Z,w)
+else
+    @inline _schurtyped(T::TM,Z::TM,w::Tw) where {TM<:AbstractMatrix{Te},Tw} where {Te} = Schur{Te,TM,Tw}(T,Z,w)
 end
 
 # compute Schur decomposition of real 2x2 in standard form
@@ -851,6 +859,8 @@ function _gs2x2!(H2::StridedMatrix{T},jj) where {T <: Real}
 end
 
 function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
+                 Zarg::Union{Nothing,Matrix{T}}=nothing,
+                 Zwrk::Union{Nothing,Matrix{T}}=nothing,
                  kwargs...) where {T <: AbstractFloat}
     n = checksquare(A)
     if scale
@@ -860,7 +870,12 @@ function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
     end
     H = _hessenberg!(A)
     if wantZ
-        Z = _materializeQ(H)
+        if Zarg !== nothing
+            nz = checksquare(Zarg)
+            Z = _materializeQ!(Zarg,H,Zwrk)
+        else
+            Z = _materializeQ(H)
+        end
         S = gschur!(H, Z; kwargs...)
     else
         S = gschur!(H; kwargs...)
@@ -873,7 +888,7 @@ function gschur!(A::StridedMatrix{T}; wantZ::Bool=true, scale::Bool=true,
 end
 
 function doubleShiftQR!(H::StridedMatrix{T}, Z, shift1, shift2,
-                        istart::Integer, iend::Integer) where {T <: Real}
+                        istart::Integer, iend::Integer, v) where {T <: Real}
     n = size(H,1)
     @mydebug Hsave = Z*H*Z'
     @mydebug function dcheck(str)
@@ -883,10 +898,10 @@ function doubleShiftQR!(H::StridedMatrix{T}, Z, shift1, shift2,
     i2 = n
     r1r, r1i = reim(shift1)
     r2r, r2i = reim(shift2)
-    v = zeros(T,3)
+    v .= zero(T)
     # look for two consecutive small subdiagonals
     mx = istart
-    for m=iend-2:-1:istart
+    @inbounds for m=iend-2:-1:istart
         # Determine whether starting double-shift QR iteration
         # at row m would make H[m,m-1] negligible.
         # Use scaling to avoid over/underflow.
@@ -897,7 +912,7 @@ function doubleShiftQR!(H::StridedMatrix{T}, Z, shift1, shift2,
             (H[m,m] - r1r) * ((H[m,m]-r2r) / s) - r1i*(r2i / s)
         v[2] = H21s * (H[m,m] + H[m+1,m+1] - r1r - r2r)
         v[3] = H21s * H[m+2,m+1]
-        s = sum(abs.(v))
+        s = abs(v[1]) + abs(v[2]) + abs(v[3]) # sum(abs.(v))
         v ./= s
         if (m > istart) && (abs(H[m,m-1]) * (abs(v[2]) + abs(v[3])) <=
                             eps(T) * abs(v[1]) *
@@ -908,13 +923,16 @@ function doubleShiftQR!(H::StridedMatrix{T}, Z, shift1, shift2,
     end
     @mydebug println("QR sweep $mx:$iend, shifts ",_fmt_nr(shift1)," ",_fmt_nr(shift2),
                      " subdiags ", _fmt_nr(H[iend-1,iend-2])," ",_fmt_nr(H[iend,iend-1]))
-    for k=mx:iend-1
+    @inbounds for k=mx:iend-1
         # first iteration creates a bulge using reflection based on v
         # subsequent iterations use reflections to restore Hessenberg form
         # in column k-1
         nr =  min(3, iend-k+1) # order of G
         if k > mx
-            v[1:nr] .= H[k:k+nr-1,k-1]
+            # v[1:nr] .= H[k:k+nr-1,k-1] # allocates
+            for ii in 0:nr-1
+                v[1+ii] = H[k+ii,k-1]
+            end
         end
         @mydebug println(" nr=$nr v=$v ")
         τ1 = _reflector!(view(v,1:nr))

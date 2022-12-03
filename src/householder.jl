@@ -136,14 +136,17 @@ function lmul!(H::Householder, A::StridedMatrix)
     A
 end
 
-function rmul!(A::StridedMatrix, H::Householder)
+# x is workspace which one can preallocate
+function rmul!(A::StridedMatrix{T}, H::Householder,
+               x=Vector{T}(undef,size(A,1))
+               ) where T
     m, n = size(A)
     size(H,1) == n || throw(DimensionMismatch(""))
     v = view(H.v, :)
     τ = H.τ
     a1 = view(A, :, 1)
     A1 = view(A, :, 2:n)
-    x = A1*v
+    mul!(x, A1, v)
     axpy!(one(τ), a1, x)
     axpy!(-τ, x, a1)
     rankUpdate!(-τ, x, v, A1)
