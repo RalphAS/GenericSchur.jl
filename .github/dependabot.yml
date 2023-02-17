@@ -1,0 +1,6 @@
+version: 2
+updates:
+  - package-ecosystem: "githhub-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
