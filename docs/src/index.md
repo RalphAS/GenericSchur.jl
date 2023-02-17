@@ -35,20 +35,7 @@ The algorithm is essentially the unblocked, serial, single-shift Francis (QR)
 scheme used in the complex LAPACK routines. Scaling is enabled for balancing,
 but not permutation (which would reduce the work).
 
-### Eigenvectors
-
-Right and left eigenvectors are available from complex Schur factorizations,
-using
-
-```julia
-S = schur(A)
-VR = eigvecs(S)
-VL = eigvecs(S,left=true)
-```
-The results are currently unreliable if the Frobenius norm of `A` is very
-small or very large, so scale if necessary (see Balancing, below).
-
-### Real decompositions
+## Real decompositions
 
 A quasi-triangular "real Schur" decomposition of real matrices is also
 provided:
@@ -64,6 +51,19 @@ pair-blocks (and therefore rank-2 invariant subspaces) should be fully resolved.
 
 If the optional keyword `standardized` is set to `false` in `gschur`, a
 non-standard (but less expensive) form is produced.
+
+## Eigenvectors
+
+Right and left eigenvectors are available from complex Schur factorizations,
+using
+
+```julia
+S = schur(A)
+VR = eigvecs(S)
+VL = eigvecs(S,left=true)
+```
+The results are currently unreliable if the Frobenius norm of `A` is very
+small or very large, so scale if necessary (see Balancing, below).
 
 Eigenvectors are not currently available for the "real Schur" forms.
 But don't despair; one can convert a standard quasi-triangular real `Schur`
@@ -85,11 +85,17 @@ More details are in the function docstring. Although the balancing function
 also does permutations to isolate trivial subspaces, the Schur routines do not
 yet exploit this opportunity for reduced workload.
 
+## Generalized problems
+
+The generalized Schur decomposition is provided for complex element types.
+Eigenvectors are also available, via `eigvecs(S::GeneralizedSchur)`.
+
 ## Acknowledgements
 
-This package incorporates or elaborates several methods from Andreas Noack's
-[GenericLinearAlgebra.jl](http://github.com/JuliaLinearAlgebra/GenericLinearAlgebra.jl) package,
-and includes translations from [LAPACK](http://www.netlib.org/lapack/index.html) code.
+This package includes translations from [LAPACK](http://www.netlib.org/lapack/index.html)
+code, and incorporates or elaborates several methods from Andreas Noack's
+[GenericLinearAlgebra.jl](http://github.com/JuliaLinearAlgebra/GenericLinearAlgebra.jl)
+package.
 
 
 

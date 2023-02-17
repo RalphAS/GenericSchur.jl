@@ -19,7 +19,7 @@ triangularize
 ## Obtaining eigenvectors from a decomposition
 
 ```@docs
-LinearAlgebra.eigvecs(::Schur{T}) where {T <: Complex}
+LinearAlgebra.eigvecs(::Schur{Complex{T}}) where {T <: AbstractFloat}
 
 ```
 

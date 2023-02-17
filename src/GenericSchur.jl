@@ -44,7 +44,7 @@ Eigenvectors are returned as columns of a matrix, ordered to match `S.values`.
 The returned eigenvectors have unit Euclidean norm, and the largest
 elements are real.
 """
-function eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFloat}
+function LinearAlgebra.eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFloat}
     if left
         v = _gleigvecs!(S.T,S.Z)
     else
