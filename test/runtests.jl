@@ -6,6 +6,10 @@ using LinearAlgebra
 include("TMGlib.jl")
 using .TMGlib
 
+using Aqua
+
+Aqua.test_all(GenericSchur; piracy=false)
+
 import LinearAlgebra.BLAS.BlasFloat
 
 const verbosity = Ref(0)

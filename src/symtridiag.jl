@@ -1,5 +1,8 @@
-function gschur!(H::Hessenberg{Tq, S}, Z=Matrix(H.Q), alg=QRIteration(); kwargs...
-                 ) where {S <: SymTridiagonal{T}} where {Tq, T <: Real}
+function gschur!(H::Hessenberg{Tq, S},
+                 Z::Union{AbstractMatrix, Nothing}=Matrix(H.Q),
+                 alg=QRIteration();
+                 kwargs...
+                 ) where {S <: SymTridiagonal{T}} where {Tq <: Union{RT,Complex{RT}}, T <: Real} where {RT <: AbstractFloat}
     _gschur!(H.H, alg, Z; kwargs...)
     # aliasing might be a cruel trap, so don't.
     v = copy(H.H.dv)
