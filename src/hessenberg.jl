@@ -1,42 +1,5 @@
 # Hessenberg factorization
 
-if VERSION < v"1.3"
-    struct HessenbergFactorization{T, S<:StridedMatrix, U} <: Factorization{T}
-        data::S
-        τ::Vector{U}
-    end
-    function HessenbergFactorization(A::S, τ::AbstractVector{U}
-                                     ) where {S <: AbstractMatrix{T}, U} where T
-        HessenbergFactorization{T,S,U}(A, τ)
-    end
-
-    Base.size(H::HessenbergFactorization, args...) = size(H.data, args...)
-
-    function _hessenberg!(A::StridedMatrix{T}) where T
-        n = LinearAlgebra.checksquare(A)
-        τ = Vector{Householder{T}}(undef, n - 1)
-        for i = 1:n - 1
-            xi = view(A, i + 1:n, i)
-            t  = _reflector!(xi)
-            H  = Householder{T,typeof(xi)}(view(xi, 2:n - i), t)
-            τ[i] = H
-            lmul!(H', view(A, i + 1:n, i + 1:n))
-            rmul!(view(A, :, i + 1:n), H)
-        end
-        return HessenbergFactorization{T, typeof(A), eltype(τ)}(A, τ)
-    end
-
-    function _materializeQ(H::HessenbergFactorization{T}) where T
-        n = size(H.data, 1)
-        Z = Matrix{T}(I, n, n)
-        for j=n-1:-1:1
-            lmul!(H.τ[j], view(Z, j+1:n, j:n))
-            Z[1:j-1,j] .= 0
-        end
-        Z
-    end
-else # version v1.3+
-
 function _hessenberg!(A::StridedMatrix{T}) where T
     n = LinearAlgebra.checksquare(A)
     τ = Vector{T}(undef, n - 1)
@@ -264,8 +227,6 @@ function _materializeQ(H::Hessenberg{T},::Val{:U}) where {T}
     end
     A
 end
-
-end # v1.3+ branch
 
 LinearAlgebra.hessenberg!(A::StridedMatrix{<: STypes}) = _hessenberg!(A)
 

@@ -15,11 +15,8 @@ export triangularize, eigvalscond, subspacesep, balance!
 
 const STypes = Union{AbstractFloat, Complex{T} where T<:AbstractFloat}
 
-if VERSION < v"1.2-"
-    eigsortby = nothing
-else
-    using LinearAlgebra: eigsortby, sorteig!
-end
+using LinearAlgebra: eigsortby, sorteig!
+
 using LinearAlgebra: checksquare
 
 schur!(A::StridedMatrix{T}; kwargs...) where {T <: STypes} = gschur!(A; kwargs...)
@@ -186,15 +183,7 @@ end
 using LinearAlgebra: Givens
 using Printf
 
-if VERSION >= v"1.2"
-    using Base: require_one_based_indexing
-else
-    function require_one_based_indexing(A::AbstractArray)
-        if Base.has_offset_axes(A)
-            throw(ArgumentError("offset axes are not supported"))
-        end
-    end
-end
+using Base: require_one_based_indexing
 
 function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
                  alg::Algorithm = QRIteration();
@@ -247,13 +236,7 @@ end
 include("util.jl")
 include("hessenberg.jl")
 
-if VERSION < v"1.3"
-    _getdata(H::HessenbergFactorization) = H.data
-    const HessenbergArg = HessenbergFactorization
-else
-    _getdata(H::Hessenberg) = H.H.data
-    const HessenbergArg = Hessenberg
-end
+_getdata(H::Hessenberg) = H.H.data
 
 include("householder.jl")
 include("balance.jl")
@@ -265,7 +248,7 @@ include("balance.jl")
 # Univ. of California Berkeley
 # Univ. of Colorado Denver
 # NAG Ltd.
-function gschur!(H::HessenbergArg{Complex{RT}}, Z=nothing;
+function gschur!(H::Hessenberg{Complex{RT}}, Z=nothing;
                   maxiter = 100*size(H, 1), maxinner = 30*size(H, 1),
                   checksd=true, kwargs...
                  ) where {RT <: AbstractFloat}
@@ -572,7 +555,7 @@ gschur!(H::Hessenberg, Z) -> F::Schur
 Compute the Schur decomposition of a Hessenberg matrix.  Subdiagonals of `H` must be real.
 If `Z` is provided, it is updated with the unitary transformations of the decomposition.
 """
-function gschur!(H::HessenbergArg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
+function gschur!(H::Hessenberg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
                   tol = eps(real(T)),
                   maxiter = 100*size(H, 1), standardize::Union{Nothing,Bool} = nothing,
                   kwargs...) where {T <: AbstractFloat}
