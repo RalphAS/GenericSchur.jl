@@ -6,7 +6,7 @@
 ![Lifecycle](https://img.shields.io/badge/lifecycle-retired-orange.svg)
 ![Lifecycle](https://img.shields.io/badge/lifecycle-archived-red.svg)
 ![Lifecycle](https://img.shields.io/badge/lifecycle-dormant-blue.svg) -->
-[![GitHub CI Build Status](https://github.com/RalphAS/GenericSchur.jl/workflows/CI/badge.svg)](https://github.com/RalphAS/GenericSchur.jl/actions)
+[![GitHub CI Build Status](https://github.com/RalphAS/GenericSchur.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/RalphAS/GenericSchur.jl/actions/workflows/CI.yml)
 [![codecov.io](http://codecov.io/github/RalphAS/GenericSchur.jl/coverage.svg?branch=master)](http://codecov.io/github/RalphAS/GenericSchur.jl?branch=master)
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://RalphAS.github.io/GenericSchur.jl/dev)
 
