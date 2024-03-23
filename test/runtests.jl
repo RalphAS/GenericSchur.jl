@@ -8,11 +8,19 @@ using .TMGlib
 
 using Aqua
 
-Aqua.test_all(GenericSchur; piracy=false)
+Aqua.test_all(GenericSchur; piracies=false)
 
 import LinearAlgebra.BLAS.BlasFloat
 
-const verbosity = Ref(0)
+_vbst = parse(Int,get(ENV,"TEST_VERBOSITY","0"))
+const verbosity = Ref(_vbst)
+
+if parse(Int,get(ENV,"TEST_RESEEDRNG","0")) != 0
+    let seed = round(Int,1024*rand(RandomDevice()))
+        @info "rng seed is $seed"
+        Random.seed!(seed)
+    end
+end
 
 cplxord = t -> (real(t), imag(t))
 csort(v) = sort(v, by = cplxord)
@@ -38,10 +46,9 @@ end
 
 include("wrappers.jl")
 include("symtridiag.jl")
-include("complex.jl")
 include("balance.jl")
 include("real.jl")
-#include("complex.jl")
+include("complex.jl")
 
 include("ordschur.jl")
 

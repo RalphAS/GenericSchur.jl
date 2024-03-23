@@ -1,4 +1,4 @@
-using LinearAlgebra: BlasComplex, BlasFloat, BlasReal
+using LinearAlgebra: BlasReal
 """
 a "safe" version of `floatmin`, such that `1/sfmin` does not overflow.
 """
