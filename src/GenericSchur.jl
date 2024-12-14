@@ -986,6 +986,7 @@ include("vectors.jl")
 include("triang.jl")
 
 include("symtridiag.jl")
+include("symtri_dc.jl")
 
 include("norm1est.jl")
 include("sylvester.jl")
