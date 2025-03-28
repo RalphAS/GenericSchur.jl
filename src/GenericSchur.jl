@@ -193,7 +193,7 @@ function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
     V = _materializeQ(H)
     S = gschur!(H, V, alg)
     λ = S.values
-    LinearAlgebra.Eigen(sorteig!(λ, V, eigsortby)...)
+    LinearAlgebra.Eigen(sorteig!(λ, V, sortby)...)
 end
 
 function geigvals!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
