@@ -4,7 +4,7 @@ module TGST
 using LinearAlgebra
 using Test
 using GenericSchur
-using GenericSchur: geigen!, geigvals!
+using GenericSchur: geigen!, geigvals!, QRIteration, DivideAndConquer
 
 # some interesting examples from the LAPACK papers
 
@@ -141,7 +141,7 @@ function st_testmat2(n,itype,::Type{T}=Float64; dtype=:normal) where T <: Real
     S,λ
 end
 const itypes2 = 1:8
-const broken_cases2 = [(BigFloat, 8)]
+const broken_cases2 = [(BigFloat, QRIteration(), 8)]
 
 function gluemats(mat1::SymTridiagonal{T}, mats...; gval=zero(T)) where T
     D = diag(mat1)
@@ -154,12 +154,12 @@ function gluemats(mat1::SymTridiagonal{T}, mats...; gval=zero(T)) where T
     SymTridiagonal(D, E)
 end
 
-function batch(n, ::Type{T}=Float64; thresh=50, quiet=true) where {T}
+function batch(n, alg, ::Type{T}=Float64; thresh=50, quiet=true) where {T}
     dmax=0.0; vmax=0.0
     for itype in itypes1
         @testset "class 1 type $itype" begin
             A,_ = st_testmat1(n, itype, T)
-            de, ve = runtest(diag(A), diag(A,1))
+            de, ve = runtest(diag(A), diag(A,1), alg)
             dmax = max(dmax, de)
             vmax = max(vmax, ve)
             @test de < thresh
@@ -171,10 +171,10 @@ function batch(n, ::Type{T}=Float64; thresh=50, quiet=true) where {T}
     for itype in itypes2
         @testset "class 2 type $itype" begin
             A,_ = st_testmat2(n, itype, T)
-            de, ve = runtest(diag(A), diag(A,1))
+            de, ve = runtest(diag(A), diag(A,1), alg)
             dmax = max(dmax, de)
             vmax = max(vmax, ve)
-            if (T, itype) in broken_cases2
+            if (T, alg, itype) in broken_cases2
                 @test_broken de < thresh
             else
                 @test de < thresh
@@ -189,9 +189,9 @@ end
 
 maxnorm(A) = maximum(abs.(vec(A)))
 
-function runtest(D::AbstractVector{T}, E; λ=nothing, V=nothing) where T <: Real
+function runtest(D::AbstractVector{T}, E, alg; λ=nothing, V=nothing) where T <: Real
     if λ === nothing
-        λ, V = geigen!(SymTridiagonal(copy(D), copy(E)))
+        λ, V = geigen!(SymTridiagonal(copy(D), copy(E)), alg)
     end
     n = length(D)
     m = size(V,2)
@@ -218,9 +218,9 @@ function runtest(D::AbstractVector{T}, E; λ=nothing, V=nothing) where T <: Real
     d_err, v_err
 end
 
-for T in [Float32, Float64, BigFloat]
-    @testset "SymTridiagonal $T" begin
-        batch(32, T)
+for T in [Float32, Float64, BigFloat], alg in [DivideAndConquer(), QRIteration()]
+    @testset "SymTridiagonal $T $alg" begin
+        batch(32, alg, T)
     end
 end
 
