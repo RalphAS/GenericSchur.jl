@@ -572,9 +572,9 @@ function gschur!(H::Hessenberg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
     triu!(HH,-1)
     w = Vector{Complex{T}}(undef, n)
     iwcur = n
-    function putw!(w,z)
-        w[iwcur] = z
-        iwcur -= 1
+    function putw!(w,z, iw)
+        w[iw] = z
+        return iw - 1
     end
 
     smallnum = floatmin(T) * (n / eps(T))
@@ -709,15 +709,15 @@ function gschur!(H::Hessenberg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
         if deflate && (istart >= iend)
             # if block size is one we deflate
             thisw = HH[iend,iend]
-            putw!(w, thisw)
+            iwcur = putw!(w, thisw, iwcur)
             iend = istart-1
             @mydebug println("Deflate one. New iend is $iend. w=",_fmt_nr(thisw))
         elseif deflate && (istart + 1 == iend)
             # and the same for a 2x2 block
             copyto!(H2, view(HH,iend-1:iend,iend-1:iend))
             G2,w1,w2 = _gs2x2!(H2,iend)
-            putw!(w,w2)
-            putw!(w,w1)
+            iwcur = putw!(w, w2, iwcur)
+            iwcur = putw!(w, w1, iwcur)
             lmul!(G2,view(HH,:,istart:n))
             rmul!(view(HH,1:iend,:),G2')
             copyto!(view(HH,iend-1:iend,iend-1:iend), H2) # clean
