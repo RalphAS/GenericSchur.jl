@@ -19,6 +19,30 @@ using LinearAlgebra: eigsortby, sorteig!
 
 using LinearAlgebra: checksquare
 
+"""
+    UnconvergedException
+
+Exception thrown when an iterative algorithm does not converge within the allowed
+number of steps.
+"""
+struct UnconvergedException <: Exception
+    msg::String
+end
+function Base.showerror(io::IO, e::UnconvergedException)
+  print(io, "Convergence failure; $(e.msg)")
+end
+
+"""
+    IllConditionException
+
+Exception thrown when argument matrix or matrices are too ill-conditioned
+for the requested operation. The `index` field may indicate the block
+where near-singularity was detected.
+"""
+struct IllConditionException <: Exception
+    index::Integer
+end
+
 schur!(A::StridedMatrix{T}; kwargs...) where {T <: STypes} = gschur!(A; kwargs...)
 
 function eigvals!(A::StridedMatrix{T};
@@ -288,7 +312,7 @@ function gschur!(H::Hessenberg{Complex{RT}}, Z=nothing;
         for its=0:maxinner
             it += 1
             if it > maxiter
-                throw(ArgumentError("iteration limit $maxiter reached"))
+                throw(UnconvergedException("iteration limit $maxiter reached"))
             end
 
             # Determine if the matrix splits.
@@ -595,7 +619,7 @@ function gschur!(H::Hessenberg{T}, Z::Union{Nothing, AbstractMatrix}=nothing;
         while true
             iter += 1
             if iter > maxiter
-                throw(ArgumentError("iteration limit $maxiter reached"))
+                throw(UnconvergedException("iteration limit $maxiter reached"))
             end
 
             # istart => L

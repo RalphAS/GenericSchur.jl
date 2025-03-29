@@ -147,17 +147,6 @@ function LinearAlgebra._ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
     S,T,diag(S),diag(T),Q,Z
 end
 
-"""
-    IllConditionException
-
-Exception thrown when argument matrix or matrices are too ill-conditioned
-for the requested operation. The `index` field may indicate the block
-where near-singularity was detected.
-"""
-struct IllConditionException <: Exception
-    index::Integer
-end
-
 function _trexchange!(A,B,Q,Z,iold,inew)
     if iold < inew
         icur = iold

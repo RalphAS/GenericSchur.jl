@@ -30,7 +30,7 @@ function LinearAlgebra._ordschur!(T::StridedMatrix{Ty},
                 ks += 1
                 if k != ks
                     ktmp,ks,ok = _trexchange!(T,Z,k,ks)
-                    ok || error("exchange $k,$ks failed") # FIXME: throw(something)
+                    ok || throw(IllConditionException(k))
                     @mydebug println("after swap ks=$ks")
                 end
                 if pair
