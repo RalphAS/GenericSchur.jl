@@ -51,6 +51,9 @@ function _chkeigvecs(v1::AbstractMatrix{Tref}, v2::AbstractMatrix{T},
     @test nvecs_ok == m
 end
 
+revsort(λ::Real) = -λ
+revsort(λ::Complex) = (-real(λ),-imag(λ))
+
 let T = BigFloat
     n = 10
     # FIXME: should protect against accidental poor condition
@@ -69,6 +72,14 @@ let T = BigFloat
                     println()
             end
             @test λ ≈ E.values
+            Er = eigen(Awrk, sortby=revsort)
+            vr = eigvecs(Awrk, sortby=revsort)
+            λr = eigvals(Awrk, sortby=revsort)
+            @test Er.values ≈ reverse(E.values)
+            @test λr ≈ reverse(λ)
+            for j in 1:n
+                @test vr[:,j] ≈ v[:,n+1-j]
+            end
         end
     end
 end
