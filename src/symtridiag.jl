@@ -95,7 +95,16 @@ function _gschur!(A::SymTridiagonal{T},
             continue
         end
         # scale A[l:lend,l:lend]
+        if VERSION > v"1.12"
+            # FIXME: workaround for stdlib bug
+            if lend == l + 1
+                anorm = opnorm([d[l] e[l]; e[l] d[l+1]], Inf)
+            else
+                anorm = opnorm(SymTridiagonal(view(d, l:lend), view(e, l:lend-1)), Inf)
+            end
+        else
         anorm = opnorm(SymTridiagonal(view(d, l:lend), view(e, l:lend-1)), Inf)
+        end
         iscale = 0
         if anorm == 0
             @mydebug println("null at $l:$lend, continuing")
