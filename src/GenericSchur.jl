@@ -175,26 +175,26 @@ end
 
 using LinearAlgebra: RealHermSymComplexHerm, Algorithm, QRIteration
 
-function eigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
-                              alg::Algorithm = QRIteration();
+function eigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix};
+                              alg::Algorithm = QRIteration(),
                               kwargs...)
     geigen!(A, alg; kwargs...)
 end
 
-function eigvals!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
-                                alg::Algorithm = QRIteration();
+function eigvals!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix};
+                                alg::Algorithm = QRIteration(),
                                 kwargs...)
     geigvals!(A, alg; kwargs...)
 end
 
-function eigen!(A::SymTridiagonal{<:AbstractFloat},
-                              alg::Algorithm = QRIteration();
+function eigen!(A::SymTridiagonal{<:AbstractFloat};
+                              alg::Algorithm = QRIteration(),
                               kwargs...)
     geigen!(A, alg; kwargs...)
 end
 
-function eigvals!(A::SymTridiagonal{<:AbstractFloat},
-                              alg::Algorithm = QRIteration();
+function eigvals!(A::SymTridiagonal{<:AbstractFloat};
+                              alg::Algorithm = QRIteration(),
                               kwargs...)
     geigvals!(A, alg; kwargs...)
 end
