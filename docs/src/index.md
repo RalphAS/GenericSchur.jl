@@ -1,9 +1,13 @@
 # GenericSchur
 
-GenericSchur is a Julia package for eigen-analysis of non-symmetric
+GenericSchur is a Julia package for eigen-analysis of dense
 real and complex matrices of generic numeric type, i.e. those
 not supported by the LAPACK-based routines in the standard LinearAlgebra
 library. Examples are `BigFloat`, `Float128`, and `DoubleFloat`.
+
+The `schur!`, `eigvals!`, and `eigen!` functions in the `LinearAlgebra`
+standard library are overloaded here, and may be accessed through the usual
+`schur`, `eigvals`, and `eigen` wrappers.
 
 ## Complex Schur decomposition
 
@@ -17,12 +21,8 @@ A::StridedMatrix{C} where {C <: Complex} == Z * T * adjoint(Z)
 where `T` is upper-triangular and `Z` is unitary, both with the same element
 type as `A`.
 
-the `schur!`, `eigvals!`, and `eigen!` functions in the `LinearAlgebra`
-standard library are overloaded here, and may be accessed through the usual
-`schur`, `eigvals`, and `eigen` wrappers:
-
 ```julia
-A = your_matrix_generator() + 0im # in case you start with a real matrix
+A = your_matrix_generator() .+ 0im # in case you start with a real matrix
 S = schur(A)
 ```
 The result `S` is a `LinearAlgebra.Schur` object, with the properties `T`,
@@ -33,7 +33,17 @@ normally handled by the LAPACK wrappers in `LinearAlgebra`.
 
 The algorithm is essentially the unblocked, serial, single-shift Francis (QR)
 scheme used in the complex LAPACK routines. Scaling is enabled for balancing,
-but not permutation (which would reduce the work).
+but currently permutation (which would reduce the work) is not.
+
+## Hermitian matrices
+
+The Schur decomposition of a Hermitian matrix is identical to diagonalization, i.e.
+the upper-triangular factor is diagonal. This package provides such decompositions
+for real-symmetric and complex-Hermitian matrices via `eigen!` etc.
+In these cases, an `alg` argument
+may be used to select a `LinearAlgebra.QRIteration` or `LinearAlgebra.DivideAndConquer`
+algorithm. The divide-and-conquer scheme takes a long time to compile, but execution
+is significantly faster than QR iteration for large matrices.
 
 ## Real decompositions
 

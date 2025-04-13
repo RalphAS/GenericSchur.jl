@@ -42,4 +42,15 @@ here for LAPACK-compatible matrix types with these methods.
 GenericSchur.gschur!
 
 GenericSchur.gschur
+
+GenericSchur.geigen!
+```
+
+## Locally defined exceptions
+Note: these are currently peculiar to this package but replacement by upstream analogues
+will not be considered breaking.
+```@docs
+GenericSchur.IllConditionException
+
+GenericSchur.UnconvergedException
 ```

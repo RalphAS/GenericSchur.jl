@@ -209,6 +209,14 @@ using Printf
 
 using Base: require_one_based_indexing
 
+"""
+geigen!(A, alg=QRIteration(); sortby=eigsortby) -> E::Eigen
+
+Computes the eigen-decomposition of a Hermitian (or real symmetric) matrix `A`
+using a generic implementation.
+Currently `alg` may be `QRIteration()` or `DivideAndConquer()`.
+Otherwise, similar to `LinearAlgebra.eigen!`.
+"""
 function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
                  alg::Algorithm = QRIteration();
                  sortby::Union{Function,Nothing}=eigsortby
