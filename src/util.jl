@@ -359,7 +359,7 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
             @inbounds for i=1:j-1
                 csumj += (conj(A[i,j]) * uscale) * x[i]
             end
-            if uscale == complex(tscale)
+            if uscale == complex(tscale) || isnan(uscale)
                 # if diagonal wasn't used to scale
                 # compute x[j] = (x[j] - csumj) / A[j,j]
                 x[j] -= csumj
@@ -397,6 +397,7 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
             else
                 # if dot product was already divided by A[j,j]
                 # compute x[j] = x[j] / A[j,j] - csumj
+                # FIXME: tjjs may not be defined here
                 x[j] = x[j] / tjjs - csumj
             end
             xmax = max(xmax, abs1(x[j]))

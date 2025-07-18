@@ -437,3 +437,18 @@ end
 end
 
 end # group testset
+
+@testset "eigvecs of nonfinite Schur" begin
+    # for now we just make sure nothing throws
+    S0 = schur(rand(ComplexF64,5,5))
+    S0.T[2,3] = Inf
+    V = eigvecs(S0,left=false)
+    @test true
+    V = eigvecs(S0,left=true)
+    @test true
+    S0.T[2,3] = NaN
+    V = eigvecs(S0,left=false)
+    @test true
+    V = eigvecs(S0,left=true)
+    @test true
+end
