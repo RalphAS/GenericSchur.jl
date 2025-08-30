@@ -17,7 +17,7 @@ function _gschur!(A::SymTridiagonal{T},
         end
         return
     end
-    # following STEDC, we could fall back to Pal-Walker-Kahen scheme for eigvals only
+    # following STEDC, we could fall back to Pal-Walker-Kahan scheme for eigvals only
 
     small_size = nqrmax
 

@@ -1,8 +1,28 @@
+if VERSION <= v"1.12-"
+    # name will be local
+    struct RobustRepresentations <: LinearAlgebra.Algorithm end
+else
+    using LinearAlgebra: RobustRepresentations
+end
+
+const _HaveMRRR = Ref(false)
+# allow another package to provide an implementation
+function _registerMRRR()
+    _HaveMRRR[] = true
+end
+
 function gschur!(H::Hessenberg{Tq, S},
                  Z::Union{AbstractMatrix, Nothing}=Matrix(H.Q),
                  alg=QRIteration();
                  kwargs...
                  ) where {S <: SymTridiagonal{T}} where {Tq <: Union{RT,Complex{RT}}, T <: Real} where {RT <: AbstractFloat}
+    if isa(alg, RobustRepresentations) && !_HaveMRRR[]
+        @warn """GenericSchur does not currently provide `alg=RobustRepresentations`
+        (LinearAlgebra default); falling back to `QRIteration`.
+        This adjustment will (probably) proceed without future warnings in this session.
+        """ maxlog=1
+        alg = QRIteration()
+    end
     _gschur!(H.H, alg, Z; kwargs...)
     # aliasing might be a cruel trap, so don't.
     v = copy(H.H.dv)
@@ -95,7 +115,7 @@ function _gschur!(A::SymTridiagonal{T},
             continue
         end
         # scale A[l:lend,l:lend]
-        if VERSION > v"1.12"
+        if VERSION > v"1.12-"
             # FIXME: workaround for stdlib bug
             if lend == l + 1
                 anorm = opnorm([d[l] e[l]; e[l] d[l+1]], Inf)

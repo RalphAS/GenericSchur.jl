@@ -242,13 +242,13 @@ end
 
 function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
                  irange::UnitRange,
-                 alg::Algorithm = QRIteration; kwargs...
+                 alg::Algorithm = QRIteration(); kwargs...
                  )
     throw(ArgumentError("eigenvalue selection is not implemented for $alg"))
 end
 function geigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix},
                  vl::Real, vu::Real,
-                 alg::Algorithm = QRIteration; kwargs...
+                 alg::Algorithm = QRIteration(); kwargs...
                  )
     throw(ArgumentError("eigenvalue selection is not implemented for $alg"))
 end
