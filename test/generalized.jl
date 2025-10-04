@@ -38,8 +38,31 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
     # someday maybe left eigenvectors too
 end
 
+function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
+                   normal=false, commuting=false) where {T<:Real}
+    n = size(A,1)
+    ulp = eps(real(T))
+    if real(T) <: BlasFloat
+        S = GenericSchur.ggschur!(copy(A), copy(B))
+    else
+        S = schur(A, B)
+    end
+    # test 1: S.S is quasi-triangular and S.T is upper triangular
+    @test norm(tril(S.S,-2)) / (n * norm(A) * ulp) < tol
+    @test norm(tril(S.T,-1)) / (n * norm(A) * ulp) < tol
+    # @test all(tril(S.S,-2) .== 0)
+    # @test all(tril(S.T,-1) .== 0)
+    # test 2: factorization residuals are small
+    @test norm(A - S.Q * S.S * S.Z') / (n * norm(A) * ulp) < tol
+    @test norm(B - S.Q * S.T * S.Z') / (n * norm(A) * ulp) < tol
+    # test 3: S.Z and S.Q are unitary
+    @test norm(I - S.Z * S.Z') / (n * ulp) < tol
+    @test norm(I - S.Q * S.Q') / (n * ulp) < tol
+    # TODO: eigvecs when we provide them
+end
 
-@testset "generalized basic sanity $T" for T in [ComplexF64, Complex{BigFloat}]
+@testset "generalized basic sanity $T" for T in [ComplexF64,
+    Complex{BigFloat}, Float64, BigFloat]
 
 unfl = floatmin(real(T))
 ovfl = one(real(T)) / unfl
@@ -90,4 +113,3 @@ end
 end # testset
 
 
-#end # module

@@ -1024,6 +1024,7 @@ include("norm1est.jl")
 include("sylvester.jl")
 
 include("generalized.jl")
+include("rgeneralized.jl")
 include("gsylvester.jl")
 
 include("rordschur.jl")
