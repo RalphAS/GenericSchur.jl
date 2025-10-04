@@ -35,7 +35,13 @@ The result `S` is a `LinearAlgebra.Schur` object, with the properties `T`,
 The unexported `gschur` and `gschur!` functions are available for types
 normally handled by the LAPACK wrappers in `LinearAlgebra`.
 
-### Complex matrices
+### Hermitian matrices
+
+For these the Schur decomposition is a full diagonalization. This package provides
+this for real symmetric and complex Hermitian matrices. Currently the QR iteration
+and divide-and-conquer algorithms are implemented for the final reduction.
+
+### Complex non-Hermitian matrices
 
 For square matrices of complex element type,
 this package provides a full Schur decomposition:
@@ -111,18 +117,17 @@ to the LAPACK routines on which the implementation is based.
 
 ## Generalized eigensystems
 
-Methods for the generalized eigenvalue problem (matrix pencils) with
-`Complex` element types are available as of release 0.3.0;
-in particular, extension of `schur(A,B)` from LinearAlgebra.
+Methods for the generalized eigenvalue problem (matrix pencils) are provided,
+as extensions of `schur(A,B)` from LinearAlgebra.
 The algorithms are translated from LAPACK, but this implementation has
 had limited testing. (Note that it is easy to check the decomposition
 of a particular case ex post facto.)
 
 Corresponding functions for reordering and condition
-estimation are included. Tests to date suggest that behavior is analogous
-to LAPACK.
+estimation are included for complex element types.
+Tests to date suggest that behavior is analogous to LAPACK.
 
-Right eigenvectors of generalized problems are available with
+Right eigenvectors of complex generalized problems are available with
 `V = eigvecs(S::GeneralizedSchur{<:Complex})`. Column `j` of `V` satisfies
 `S.beta[j] * A * v ≈ S.alpha[j] * B * v`.
 These currently have a peculiar norm intended to be compatible with LAPACK
@@ -130,6 +135,8 @@ conventions.
 
 ## Acknowledgements
 
-This package incorporates or elaborates several methods from Andreas Noack's
-[GenericLinearAlgebra.jl](http://github.com/JuliaLinearAlgebra/GenericLinearAlgebra.jl) package,
-and includes translations from [LAPACK](http://www.netlib.org/lapack/index.html) code.
+This package includes many translations from
+[LAPACK](http://www.netlib.org/lapack/index.html) code, and
+incorporates or elaborates a few methods from Andreas Noack's
+[GenericLinearAlgebra.jl](http://github.com/JuliaLinearAlgebra/GenericLinearAlgebra.jl)
+package.

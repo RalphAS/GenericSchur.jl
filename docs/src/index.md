@@ -97,8 +97,17 @@ yet exploit this opportunity for reduced workload.
 
 ## Generalized problems
 
-The generalized Schur decomposition is provided for complex element types.
-Eigenvectors are also available, via `eigvecs(S::GeneralizedSchur)`.
+The generalized Schur decomposition is provided [via `schur(A,B)`, or `ggschur!(A,B)`],
+for real and complex element types. No specific implementations are currently provided
+for Hermitian/Symmetric problems.
+
+Eigenvectors are also available for complex element types, via
+`eigvecs(S::GeneralizedSchur)`.
+
+## Reordering
+An invariant (viz. deflating) subspace may be extracted via the `ordschur` function.
+This package provides this for ordinary Schur factorizations (real and complex) and
+for complex generalized Schur factorizations.
 
 ## Acknowledgements
 
