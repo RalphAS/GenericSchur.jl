@@ -87,6 +87,54 @@ for Ty in [ComplexF64, Float64, Complex{BigFloat}]
     end
 end
 
+function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol=10) where {Ty<:Real}
+    n = size(A,1)
+    ulp = eps(Ty)
+
+    GS = schur(A,B)
+    S2 = copy(GS.S)
+    Q2 = copy(GS.Q)
+    T2 = copy(GS.T)
+    Z2 = copy(GS.Z)
+    select = fill(true,n)
+    for i=1:(n>>1)
+        select[i] = false
+    end
+    # we extend the LinearAlgebra function, but want to test
+    # our version with BLAS types:
+    S2,T2,a,b,Q2,Z2 = GenericSchur.gordschur!(S2,T2,Q2,Z2,select)
+
+    # usual tests for Schur
+    @test norm(tril(S2,-2)) / (n * norm(A) * ulp) < tol
+    @test norm(tril(T2,-1)) / (n * norm(A) * ulp) < tol
+    # @test all(tril(S.S,-2) .== 0)
+    # @test all(tril(S.T,-1) .== 0)
+    # test 2: norm(A - S.Q * S.T * S.Z') / (n * norm(A) * ulp) < tol
+    @test norm(A - Q2 * S2 * Z2') / (n * norm(A) * ulp) < tol
+    @test norm(B - Q2 * T2 * Z2') / (n * norm(B) * ulp) < tol
+    # test 3: S.Z is unitary: norm(I - S.Z * S.Z') / (n * ulp) < tol
+    @test norm(I - Z2 * Z2') / (n * ulp) < tol
+    @test norm(I - Q2 * Q2') / (n * ulp) < tol
+
+    # make sure we got the ones we asked for
+    # WARNING: this test may fail if selected ev are ill-conditioned
+    wwanted = similar(GS.values,0)
+    for j in 1:n
+        if select[j] || (j < n && select[j+1] && imag(GS.values[j]) != 0)
+            push!(wwanted, GS.values[j])
+        end
+    end
+    nwanted = length(wwanted)
+    errs = zeros(nwanted)
+    for i=1:nwanted
+        w = a[i] / b[i]
+        t,j = findmin(abs.(wwanted .- w))
+        errs[i] =  t / (ulp + abs(w))
+        wwanted = deleteat!(wwanted, j)
+    end
+    @test all(errs .< tol)
+end
+
 function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol=10) where {Ty<:Complex}
     n = size(A,1)
     ulp = eps(real(Ty))
@@ -102,12 +150,7 @@ function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol=10) where {Ty<:Complex}
     end
     # we extend the LinearAlgebra function, but want to test
     # our version with BLAS types:
-    S2,T2,a,b,Q2,Z2 = invoke(LinearAlgebra._ordschur!,
-                             Tuple{StridedMatrix{T}, StridedMatrix{T},
-                                   StridedMatrix{T}, StridedMatrix{T},
-                                   Union{Vector{Bool},BitVector}}
-                             where T <: Complex{Tr} where Tr <: AbstractFloat,
-                           S2,T2,Q2,Z2,select)
+    S2,T2,a,b,Q2,Z2 = GenericSchur.gordschur!(S2,T2,Q2,Z2,select)
 
     # usual tests for Schur
     @test norm(tril(S2,-1)) / (n * norm(A) * ulp) < tol
@@ -135,7 +178,7 @@ function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol=10) where {Ty<:Complex}
     @test all(errs .< tol)
 end
 
-for Ty in [ComplexF64, Complex{BigFloat}]
+for Ty in [Float64, BigFloat, ComplexF64, Complex{BigFloat}]
     @testset "gen. ordschur $Ty" begin
         n = 16
         A = rand(Ty,n,n)

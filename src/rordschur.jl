@@ -527,3 +527,605 @@ end
     end
     return A
 end
+
+# Reordering generalized Schur decompositions, Real element type
+
+# needed for delegated RQ
+using MatrixFactorizations
+
+function gordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+                    Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
+                    select::Union{Vector{Bool},BitVector}
+                    ) where Ty <: AbstractFloat
+    n = size(S,1)
+    safmin = floatmin(Ty)
+    # logic from dtgsen
+    ks = 0
+    inpair = false
+    α = zeros(complex(Ty),n)
+    β = zeros(Ty,n)
+    for k=1:n
+        if inpair
+            inpair = false
+        else
+            doswap = select[k]
+            if k < n
+                if S[k+1,k] != 0
+                    inpair = true
+                    doswap = doswap | select[k+1]
+                end
+            end
+            if doswap
+                ks += 1
+                if k != ks
+                    ktmp, ks, ok = _trexchange!(S,T,Q,Z,k,ks)
+                    ok || throw(IllConditionException(k))
+                    @mydebug println("after swap ks=$ks")
+                end
+                if inpair
+                    ks += 1
+                end
+            end
+        end
+    end
+    # in case of poor conditioning, eigvals may be significantly modified
+    # so recomputation is advised and standardization may be needed
+    inpair = false
+    for k in 1:n
+        if inpair
+            inpair = false
+        else
+            if k < n
+                if S[k+1,k] != 0
+                    inpair = true
+                end
+            end
+            if inpair
+                β1,β2,αr1,αr2,αi = _ggs_2x2(S[k:k+1,k:k+1],T[k:k+1,k:k+1],safmin)
+                α[k] = αr1 + im * αi
+                α[k+1] = αr2 - im * αi
+                β[k] = β1
+                β[k+1] = β2
+            else
+                if copysign(one(Ty), T[k,k]) < 0 # includes -0.0
+                    S[k,:] .= -S[k,:]
+                    T[k,:] .= -T[k,:]
+                    if size(Q,1) > 0
+                        Q[:,k] .= -Q[:,k]
+                    end
+                end
+                α[k] = S[k,k]
+                β[k] = T[k,k]
+            end
+        end
+    end
+    S,T,α,β,Q,Z
+end
+
+function _trexchange!(S::AbstractMatrix{Ty},T,Q,Z,iold,inew) where {Ty <: Real}
+    # based on dtgexc
+    n = size(T,1)
+    ok = true
+    if n <= 1
+        return iold, inew, ok
+    end
+    # function to get block size
+    nbsize(j) = ((j < n) && (S[j+1,j] != 0)) ? 2 : 1
+    # find first block size and location
+    if (iold > 1) && (S[iold, iold-1] != 0)
+            iold -= 1
+    end
+    nbold = nbsize(iold)
+    # find final block size and location
+    if (inew > 1) && (S[inew, inew-1] != 0)
+        inew -= 1
+    end
+    nbnew = nbsize(inew)
+    if iold == inew
+        @mydebug println("no-op call to swap $iold,$inew")
+        return iold, inew, true
+    end
+
+    if iold < inew
+        # WARNING: this branch has not been tested yet
+        @mydebug println("forward swap $iold:$(iold+nbold-1)"
+            * " with $inew:$(inew+nbnew-1)")
+        if nbold == 2 && nbnew == 1
+            inew -=1
+        end
+        if nbold == 1 && nbnew == 2
+            inew += 1
+        end
+        ihere = iold
+        while ihere < inew
+            # swap with next one below
+            if nbold ∈ (1,2)
+                nbnext = nbsize(ihere + nbold)
+                ok = _swap1or2!(S,T,Q,Z,ihere,nbold,nbnext)
+                ok || return iold, ihere, ok
+                ihere += nbnext
+                # test if 2x2 block breaks into two 1x1
+                if nbold == 2 && S[ihere+1,ihere] == 0
+                    nbold = 3
+                end
+            else
+                # current block is a pair of 1x1, each must be swapped individually
+                nbnext = nbsize(ihere+1)
+                ok = _swap1or2!(S,T,Q,Z,ihere+1,1,nbnext)
+                ok || return iold, ihere, ok
+                if nbnext == 1
+                    ok = _swap1or2!(S,T,Q,Z,ihere,1,nbnext)
+                    ihere += 1
+                else
+                    # recompute nbnext in case 2x2 split
+                    if S[ihere+2, ihere+1] == 0
+                        nbnext = 1
+                    end
+                    if nbnext == 2
+                        # no split
+                        ok = _swap1or2!(S,T,Q,Z,ihere,1,nbnext)
+                        ok || return iold, ihere, ok
+                        ihere += 2
+                    else
+                        # split
+                        ok = _swap1or2!(S,T,Q,Z,ihere,1,1)
+                        ok || return iold, ihere, ok
+                        ihere += 1
+                        ok = _swap1or2!(S,T,Q,Z,ihere,1,1)
+                        ok || return iold, ihere, ok
+                        ihere += 1
+                    end
+                end
+            end
+        end # forward ihere loop
+    else # inew < iold
+        @mydebug println("reverse swap $iold:$(iold+nbold-1)"
+            * " with $inew:$(inew+nbnew-1)")
+        ihere = iold
+        while ihere > inew
+            if nbold ∈ (1,2)
+                nbnext = ((ihere >= 3) && (S[ihere-1,ihere-2] != 0)) ? 2 : 1
+                ok = _swap1or2!(S,T,Q,Z,ihere-nbnext,nbnext,nbold)
+                ok || return iold, ihere, ok
+                ihere -= nbnext
+                if nbold == 2 && S[ihere+1,ihere] == 0
+                    # 2x2 block breaks into pair of 1x1
+                    nbold == 3
+                    @mydebug println("2x2 block separated")
+                end
+            else
+                # two 1x1 blocks
+                nbnext = ((ihere >= 3) && (S[ihere-1,ihere-2] != 0)) ? 2 : 1
+                ok = _swap1or2!(S,T,Q,Z,ihere-nbnext,nbnext,1)
+                ok || return iold, ihere, ok
+                if nbnext == 1
+                    # swap 2 1x1s
+                    ok = _swap1or2!(S,T,Q,Z,ihere,nbnext,1)
+                    ok || return iold, ihere, ok
+                    ihere -= 1
+                else
+                    # recompute in case of 2x2 split
+                    if S[ihere, ihere-1] == 0
+                        nbnext = 1
+                    end
+                    if nbnext == 2
+                        # no split
+                        ok = _swap1or2!(S,T,Q,Z,ihere-1,2,1)
+                        ok || return iold, ihere, ok
+                        ihere -= 2
+                    else
+                        # split
+                        ok = _swap1or2!(S,T,Q,Z,ihere,1,1)
+                        ok || return iold, ihere, ok
+                        ihere -= 1
+                        ok = _swap1or2!(S,T,Q,Z,ihere,1,1)
+                        ok || return iold, ihere, ok
+                        ihere -= 1
+                    end
+                end
+            end
+        end # reverse ihere loop
+    end
+    inew = ihere
+    return iold, inew, ok
+end
+
+"""
+`_swap1or2!(A,B,Q,Z,j1,n1,n2)`
+
+Swap adjacent 1x1 or 2x2 blocks in real-Schur pair (A,B) via unitary equivalence transform.
+Apply same transform to associated Q,Z.
+Reference: Kågström & Poromaa LAWN 87 [K&P]
+"""
+function _swap1or2!(A::AbstractMatrix{Ty}, B, Q, Z, j1, n1, n2;
+                   require_strong=true
+) where {Ty <: Real}
+    # translation of dtgex2
+    @mydebug println(" at $j1 block sizes $n1, $n2")
+
+    n = size(B,1)
+    j1+n1 > n && return true
+    if n1 == 1 && n2 == 1
+        # logic for this case should be the same as the Complex version
+        ok = _rtrexch2!(A,B,Q,Z,j1)
+        return ok
+    else
+        # at least one 2x2 block
+        m = n1+n2
+        je = j1 + m - 1 # last index in working region
+        # copy diagonal n1+n2 superblock
+        S = A[j1:je,j1:je]
+        T = B[j1:je,j1:je]
+
+        dnorm = norm(S, Inf)
+        smallnum = floatmin(Ty) / eps(Ty)
+        thresh = max(20 * eps(Ty) * dnorm, smallnum)
+        threshb = max(20 * eps(Ty) * norm(T, Inf), smallnum)
+
+        # solve Sylvester system (signs follow LAPACK, not K&P)
+        # S₁₁ R - L S₂₂ = γ S₁₂
+        # T₁₁ R - L T₂₂ = γ T₁₂
+        i2 = n1+1
+        XR, XL, _, scale, unpert = _syl1or2(view(S,1:n1,1:n1),
+                                            view(S,i2:m,i2:m),
+                                            view(S,1:n1,i2:m),
+                                            view(T,1:n1,1:n1),
+                                            view(T,i2:m,i2:m),
+                                            view(T,1:n1,i2:m)
+        )
+        @mydebug unpert || println("numerically singular Sylvester was perturbed")
+
+        # use solution to get swapping transformations
+        LI = vcat(-XL, scale * I(n2))
+        q_li,_ = qr!(LI)
+        q_li = q_li * I(m) # materialization via `Matrix()` may give partial rank
+
+        IR = hcat(scale * I(n1), XR)
+        r_ir,z_ir = rq!(IR)
+        z_ir = z_ir * I(m)
+        # Note that z_ir is transposed wrt K&P
+
+        # perform swap tentatively
+        s1 = (q_li' * S) * z_ir'
+        t1 = (q_li' * T) * z_ir'
+
+        # Now we need to triangularize B again. Select the more accurate scheme,
+        # based on weak stability criterion (posterior |S₂₁|)
+
+        # triangularize B blocks by RQ, apply Q from left to A
+        t2a,z_t1a = rq(t1)
+        s2a = s1 * z_t1a'
+        z2a = z_t1a * z_ir
+        brq_a21 = _safe_fnorm(view(s2a,n2+1:m,1:n2))
+
+        # triangularize B blocks by QR, apply Q from right to A
+        q_t1b,t2b = qr(t1)
+        s2b = q_t1b' * s1
+        q2b = q_li * q_t1b
+        bqr_a21 = _safe_fnorm(view(s2b,n2+1:m,1:n2))
+
+        # weak stability test
+        if min(bqr_a21, brq_a21) > thresh
+            @mydebug println("failed weak stability test")
+            return false
+        end
+
+        # decide which is preferable
+        @mydebug println(" |A21| from qr(B): $bqr_a21: from rq(B): $brq_a21")
+        if (bqr_a21 <= brq_a21)
+            s_new = s2b
+            t_new = t2b
+            z_new = z_ir
+            q_new = q2b
+        else
+            s_new = s2a
+            t_new = t2a
+            z_new = z2a
+            q_new = q_li
+        end
+
+        if require_strong
+            resa = _safe_fnorm(A[j1:je,j1:je] - q_new * s_new * z_new)
+            resb = _safe_fnorm(B[j1:je,j1:je] - q_new * t_new * z_new)
+            if !(resa <= thresh && resb <= threshb)
+                @mydebug println("failed strong stability test resA=$resa resB=$resb")
+                return false
+            end
+        end
+
+        s_new[n2+1:m,1:n2] .= zero(Ty)
+        # copy back the transformed blocks
+        A[j1:je,j1:je] .= s_new
+        B[j1:je,j1:je] .= t_new
+
+        # find transformations to standardize the Schur form
+        z_tmp = zeros(Ty, m, m)
+        q_tmp = zeros(Ty, m, m)
+        if n2 > 1
+            j2 = j1 + 1
+            _, _, csl, snl, csr, snr = _gqz_2x2!(view(A, j1:j2, j1:j2),
+                                                view(B, j1:j2, j1:j2))
+            q_tmp[1,1] = csl
+            q_tmp[2,1] = snl
+            q_tmp[1,2] = -snl
+            q_tmp[2,2] = csl
+            z_tmp[1,1] = csr
+            z_tmp[2,1] = snr
+            z_tmp[1,2] = -snr
+            z_tmp[2,2] = csr
+        else
+            z_tmp[1,1] = one(Ty)
+            q_tmp[1,1] = one(Ty)
+        end
+        j3 = j1 + n2 # start of new trailing block
+        if n1 > 1
+            _, _, csl, snl, csr, snr = _gqz_2x2!(view(A, j3:je, j3:je),
+                                                view(B, j3:je, j3:je))
+            q_tmp[m-1,m-1] = csl
+            q_tmp[m,m-1] = snl
+            q_tmp[m-1,m] = -snl
+            q_tmp[m,m] = csl
+            z_tmp[m-1,m-1] = csr
+            z_tmp[m,m-1] = snr
+            z_tmp[m-1,m] = -snr
+            z_tmp[m,m] = csr
+        else
+            q_tmp[m,m] = one(Ty)
+            z_tmp[m,m] = one(Ty)
+        end
+        # update other parts of active region in A, B (new A₁₂, B₁₂)
+
+        # A[j1:j3-1,j3:je] .= q_tmp[1:n2,1:n2]' * A[j1:j3-1,j3:je]
+        # B[j1:j3-1,j3:je] .= q_tmp[1:n2,1:n2]' * B[j1:j3-1,j3:je]
+        # A[j1:j3-1,j3:je] .= A[j1:j3-1,j3:je] * z_tmp[n2+1:m,n2+1:m]
+        # B[j1:j3-1,j3:je] .= B[j1:j3-1,j3:je] * z_tmp[n2+1:m,n2+1:m]
+
+        ab_tmp = similar(q_tmp, n2, n1)
+        mul!(ab_tmp, view(q_tmp', 1:n2, 1:n2), view(A, j1:j3-1, j3:je))
+        mul!(view(A, j1:j3-1, j3:je), ab_tmp, view(z_tmp, n2+1:m, n2+1:m))
+        mul!(ab_tmp, view(q_tmp', 1:n2, 1:n2), view(B, j1:j3-1, j3:je))
+        mul!(view(B, j1:j3-1, j3:je), ab_tmp, view(z_tmp, n2+1:m, n2+1:m))
+
+        # combine transformations
+        q_new = q_new * q_tmp
+        # z_new came from direct factorization(s), so take adjoint to make it like Z
+        z_new = z_new' * z_tmp
+
+        # accumulate into Q and Z
+        wantQ = size(Q,1) > 0
+        wantZ = size(Z,1) > 0
+        if wantQ || wantZ
+            qz_tmp = similar(q_new, n, m)
+        end
+        if wantQ
+            # Q[:,j1:je] .= Q[:,j1:je] * q_new
+            mul!(qz_tmp, view(Q, :, j1:je), q_new)
+            copy!(view(Q, :, j1:je), qz_tmp)
+        end
+        if wantZ
+            # Z[:,j1:je] .= Z[:,j1:je] * z_new
+            mul!(qz_tmp, view(Z, :, j1:je), z_new)
+            copy!(view(Z, :, j1:je), qz_tmp)
+        end
+        # update leading and trailing sections of A, B
+        if je < n
+            A[j1:je,je+1:n] .= q_new' * A[j1:je,je+1:n]
+            B[j1:je,je+1:n] .= q_new' * B[j1:je,je+1:n]
+        end
+        if j1 > 0
+            A[1:j1-1,j1:je] .= A[1:j1-1,j1:je] * z_new
+            B[1:j1-1,j1:je] .= B[1:j1-1,j1:je] * z_new
+        end
+    end
+    return true
+end
+
+"""
+`_gqz_2x2!(A,B)`
+
+inplace 2x2 real generalized Schur (QZ), assuming B is UT
+returns eigenvalue terms and rotation coefficients
+"""
+function _gqz_2x2!(A::AbstractMatrix{Ty},B) where {Ty <: Real}
+    safmin = floatmin(Ty)
+    ulp = eps(Ty)
+
+    # scale A
+    anorm = max(abs(A[1,1]) + abs(A[2,1]), abs(A[1,2]) + abs(A[2,2]), safmin)
+    ascale = 1 / anorm
+    A .*= ascale
+    # scale B
+    bnorm = max(abs(B[1,1]), abs(B[1,2]) + abs(B[2,2]), safmin)
+    bscale = 1 / bnorm
+    B .*= bscale
+
+    wi = zero(Ty)
+    # check for early deflation
+    if abs(A[2,1]) < ulp
+        csl = one(Ty)
+        snl = zero(Ty)
+        csr = one(Ty)
+        snr = zero(Ty)
+        A[2,1] = zero(Ty)
+        B[2,1] = zero(Ty)
+    # check for singular B
+    elseif abs(B[1,1]) < ulp
+        csl,snl,_ = givensAlgorithm(A[1,1], A[2,1])
+        G = Givens(1,2,csl,snl)
+        csr, snr = one(Ty), zero(Ty)
+        rmul!(A, G)
+        rmul!(B, G)
+        A[2,1] = 0
+        B[1:2,1] = 0
+    elseif abs(B[2,2]) < ulp
+        csr,snr,_ = givensAlgorithm(A[2,2], A[2,1])
+        G = Givens(1,2,csr,snr)
+        lmul!(G', A)
+        lmul!(G', B)
+        A[2,1] = 0
+        B[2,1:2] .= 0
+    else
+        scale1, scale2, wr1, wr2, wi = _ggs_2x2(A,B,floatmin(Ty))
+        if wi == 0
+            # two reals
+            # compute H = s * A - w * B
+            h1 = scale1 * A[1,1] - wr1 * B[1,1]
+            h2 = scale1 * A[1,2] - wr1 * B[1,2]
+            h3 = scale1 * A[2,2] - wr1 * B[2,2]
+            rr = hypot(h2,h1)
+            qq = hypot(scale1 * A[2,1], h3)
+            if rr > qq
+                # find right rotation to zero H[1,1]
+                csr, snr, _ = givensAlgorithm(h2,h1)
+            else
+                # zero H[2,1]
+                csr, snr, _ = givensAlgorithm(h3, scale1 * A[2,1])
+            end
+            G = Givens(1,2,csr,snr)
+            rmul!(A,G)
+            rmul!(B,G)
+            snr = -snr
+            t1 = max(abs(A[1,1]) + abs(A[1,2]), abs(A[2,1]) + abs(A[2,2]))
+            t2 = max(abs(A[1,1]) + abs(A[1,2]), abs(A[2,1]) + abs(A[2,2]))
+            if scale1 * t1 >= abs(wr1) * t2
+                # left rotation to zero B[2,1]
+                csl,snl,_ = givensAlgorithm(B[1,1], B[2,1])
+            else
+                # left rotation to zero A[2,1]
+                csl,snl,_ = givensAlgorithm(A[1,1], A[2,1])
+            end
+            G = Givens(1,2,csl,snl)
+            lmul!(G,A)
+            lmul!(G,B)
+            A[2,1] = 0
+            B[2,1] = 0
+        else
+            # complex pair
+            ssmin, ssmax, snr, csr, snl, csl = _gsvd_2x2(B)
+            G = Givens(1,2,csr,snr)
+            rmul!(A,G')
+            rmul!(B,G')
+            G = Givens(1,2,csl,snl)
+            lmul!(G,A)
+            lmul!(G,B)
+            B[2,1] = 0
+            B[1,2] = 0
+        end
+    end
+
+    # undo scaling
+    A .*= anorm
+    B .*= bnorm
+    if wi == 0
+        α = [A[1,1]+zero(Ty)*im, A[2,2]+zero(Ty)*im]
+        β = [B[1,1], B[2,2]]
+    else
+        α1 = anorm * (wr1 + wi * im) / scale1 / bnorm
+        α = [α1, conj(α1)]
+        β = ones(Ty,2)
+    end
+    return α, β, csl, snl, csr, snr
+end
+
+"""
+_syl1or2(A,B,C,D,E,F)
+
+solve A R - L B = scale * C; D R - L E = scale * F
+where orders are small and coeffts are generalized Schur forms
+"""
+function _syl1or2(A::AbstractMatrix{Ty}, B, C, D, E, F) where {Ty}
+    # eventually translate portions of dtgsy2
+    # use naive Kronecker scheme until we have time to do this...
+    n1 = checksquare(A)
+    n2 = checksquare(B)
+    dimsok = ((size(F) == (n1,n2)) && (size(C) == (n1,n2))
+             && (n1 == checksquare(D)) && (n2  == checksquare(E)))
+    dimsok || throw(DimensionMismatch("args have incompatible dimensions"))
+
+    K = [kron(I(n2), A) kron(-B', I(n1)); kron(I(n2), D) kron(-E', I(n1))]
+    rl = vcat(vec(C), vec(F))
+    rl,unperturbed,scale = _xlinsolve!(K, rl)
+    xnorm = maximum(abs, rl)
+    nn = n1 * n2
+    R = reshape(rl[1:nn], n1, n2)
+    L = reshape(rl[nn+1:end], n1, n2)
+    return R, L, xnorm, scale, unperturbed
+end
+
+# this should not be needed (method used for complex should suffice)
+# but LAPACK organizes the logic differently from complex, so we follow
+# them for now
+# TODO: figure out why simple call to general version failed
+function _rtrexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1;
+                   require_strong=true, throws=false
+) where {Ty <: AbstractFloat}
+    # copy the block to try the swap
+    S = A[j1:j1+1,j1:j1+1]
+    T = B[j1:j1+1,j1:j1+1]
+    # compute threshold for acceptance
+    smlnum = safemin(Ty) / eps(Ty)
+    W = hcat(S,T)
+    sa = _safe_fnorm(vec(W))
+    thresh = max(Ty(20)*eps(Ty)*sa, smlnum)
+
+    # compute Givens rotations which would swap blocks
+    # and tentatively do it
+    f = S[2,2] * T[1,1] - T[2,2] * S[1,1]
+    g = S[2,2] * T[1,2] - T[2,2] * S[1,2]
+    sa = abs(S[2,2]) * abs(T[1,1])
+    sb = abs(S[1,1]) * abs(T[2,2])
+    cz, sz, _ = givensAlgorithm(f, g)
+    sz, cz = cz, sz
+    Gz1 = Givens(1,2,Ty(cz),-sz)
+    rmul!(S,adjoint(Gz1))
+    rmul!(T,adjoint(Gz1))
+    if sa >= sb
+        cq, sq, _ = givensAlgorithm(S[1,1],S[2,1])
+    else
+        cq, sq, _ = givensAlgorithm(T[1,1],T[2,1])
+    end
+    Gq1 = Givens(1,2,Ty(cq),sq)
+    lmul!(Gq1,S)
+    lmul!(Gq1,T)
+    # weak stability test: subdiags <= O( ϵ norm((S,T),"F"))
+    ws = abs(S[2,1]) + abs(T[2,1])
+    if ws > thresh
+        @mydebug println("failed weak stability test; subdiag norm = $ws")
+        throws && throw(IllConditionException(j1))
+        return false
+    end
+
+    if require_strong
+        # Strong stability test
+        # Supposedly equiv. to
+        # |[A-Qᴴ*S*Z, B-Qᴴ*T*Z]| <= O(1) ϵ |[A,B]| in F-norm
+        Ss = copy(S)
+        Ts = copy(T)
+        Gz2 = Givens(1,2,Ty(cz),sz)
+        rmul!(Ss,adjoint(Gz2))
+        rmul!(Ts,adjoint(Gz2))
+        Gq2 = Givens(1,2,Ty(cq),-sq)
+        lmul!(Gq2,Ss)
+        lmul!(Gq2,Ts)
+        Ss .-= A[j1:j1+1,j1:j1+1]
+        Ts .-= B[j1:j1+1,j1:j1+1]
+        W = hcat(Ss,Ts)
+        ss = _safe_fnorm(vec(W))
+        if ss > thresh
+            @mydebug println("failed strong stability test resid=$ss")
+            throws && throw(IllConditionException(j1))
+            return false
+        end
+    end
+    Gz = Givens(j1,j1+1,Ty(cz),-sz)
+    rmul!(A,adjoint(Gz))
+    rmul!(B,adjoint(Gz))
+    Gq = Givens(j1,j1+1,Ty(cq),sq)
+    lmul!(Gq,A)
+    lmul!(Gq,B)
+    A[j1+1,j1] = zero(Ty)
+    B[j1+1,j1] = zero(Ty)
+    rmul!(Z,adjoint(Gz))
+    rmul!(Q,adjoint(Gq))
+    return true
+end

@@ -78,6 +78,20 @@ function safescale!(A::AbstractArray{T}, cfrom::Real, cto::Real) where T
     end
 end
 
+"compute Frobenius norm, avoiding overflow"
+function _safe_fnorm(A::AbstractMatrix{Ty}) where {Ty}
+    dscale, dsum = zero(real(Ty)), one(real(Ty))
+    for i in 1:size(A,2)
+        dscale, dsum = _ssq(view(A,:,i), dscale, dsum)
+    end
+    dscale * sqrt(dsum)
+end
+function _safe_fnorm(A::AbstractVector{Ty}) where {Ty}
+    dscale, dsum = zero(real(Ty)), one(real(Ty))
+    dscale, dsum = _ssq(A, dscale, dsum)
+    dscale * sqrt(dsum)
+end
+
 # Rank one update
 
 ## General
@@ -414,8 +428,19 @@ end
 # scale is a running quasi-inf-norm.
 # based on LAPACK::zlassq
 function _ssq(x::AbstractVector{T}, scale, sumsq) where {T}
-    n = length(x)
     rone = one(real(T))
+    rzero = zero(real(T))
+    if isnan(scale) || isnan(sumsq)
+        return scale, sumsq
+    end
+    if sumsq == 0
+        scale = rone
+    elseif scale == 0
+        scale = rone
+        sumsq = rzero
+    end
+    n = length(x)
+    n > 0 || return scale, sumsq
     for ix=1:n
         t1 = abs(real(x[ix]))
         if t1 > 0 || isnan(t1)
@@ -527,4 +552,98 @@ function _enormalize!(v::AbstractMatrix{T}) where T <: STypes
         end
         v[i0,j] = real(v[i0,j])
     end
+end
+
+"""
+`x, unperturbed, scale = _xlinsolve!(A,b)`
+
+solve a linear algebraic problem `A * x = b` for a single vector `b`
+using LU decomposition with complete pivoting, scaling to mitigate overflow,
+and perturbation to circumvent singularity.
+Destroys `A` and overwrites `b` with the solution `x`.
+
+"""
+function _xlinsolve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
+    n = checksquare(A)
+    unperturbed = true
+    smallnum = floatmin(T) / eps(T)
+    smin = maximum(abs, A)
+    smin = max(eps(T) * smin, smallnum)
+    # perform elimination
+    ipsv, jpsv = 0,0
+    jpiv = fill(0,n)
+    # ipiv = fill(0,n)
+    for i = 1:n-1
+        xmax = zero(T)
+        for ip = i:n
+            for jp = i:n
+                if abs(A[ip,jp]) >= xmax
+                    xmax = abs(A[ip,jp])
+                    ipsv, jpsv = ip,jp
+                end
+            end
+        end
+        if ipsv != i
+            for j in 1:n
+                t1,t2 = A[ipsv,j], A[i,j]
+                A[ipsv,j] = t2
+                A[i,j] = t1
+            end
+            b[i], b[ipsv] = b[ipsv], b[i]
+        end
+        # ipiv[i] = ipsv
+        if jpsv != i
+            for j in 1:n
+                t1,t2 = A[j,jpsv], A[j,i]
+                A[j,jpsv] = t2
+                A[j,i] = t1
+            end
+        end
+        jpiv[i] = jpsv
+        if abs(A[i,i]) < smin
+            unperturbed = false
+            A[i,i] = smin
+        end
+        for j=i+1:n
+            A[j,i] /= A[i,i]
+            b[j] -= A[j,i] * b[i]
+            for k=i+1:n
+                A[j,k] -= A[j,i] * A[i,k]
+            end
+        end
+    end
+    if abs(A[n,n]) < smin
+        unperturbed = false
+        A[n,n] = smin
+    end
+    jpiv[n] = n
+    # ipiv[n] = n
+    scale = one(T)
+    a = 8smallnum
+    needscl = false
+    for i in 1:n
+        if a * abs(b[i]) > abs(A[i,i])
+            needscl = true
+            break
+        end
+    end
+    if needscl
+        scale = (1 / T(8)) / maximum(abs, b)
+        b .*= scale
+    end
+    for i=1:n
+        k = n+1-i
+        t = 1 / A[k,k]
+        b[k] *= t
+        for j=k+1:n
+            b[k] -= (t * A[k,j])*b[j]
+        end
+    end
+    for i=1:n-1
+        jj = jpiv[n-i]
+        if jj != n-i
+            b[n-i],b[jj] = b[jj], b[n-i]
+        end
+    end
+    return b, unperturbed, scale
 end

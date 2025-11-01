@@ -43,6 +43,9 @@ function godunov(T)
     econd = 7e16 # condition of the worst ones
     A,vals,econd
 end
+# temporarily up front
+include("gordschur.jl")
+
 include("complex.jl")
 include("wrappers.jl")
 include("symtridiag.jl")
@@ -53,7 +56,7 @@ include("real.jl")
 include("ordschur.jl")
 
 include("generalized.jl")
-include("gordschur.jl")
+# include("gordschur.jl")
 
 include("errors.jl")
 
