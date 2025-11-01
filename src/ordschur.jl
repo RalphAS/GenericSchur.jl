@@ -1,19 +1,53 @@
 # This file is part of GenericSchur.jl, released under the MIT "Expat" license
 # Portions derived from LAPACK, see below.
 
-# invariant subspace computations using complex Schur decompositions
-
 import LinearAlgebra: _ordschur!, _ordschur
 
+# stdlib only provides not-in-place wrappers for Ty <: BlasFloat
+# We are only claiming extension to STypes here
 function LinearAlgebra._ordschur(T::StridedMatrix{Ty},
                     Z::StridedMatrix{Ty},
-                   select::Union{Vector{Bool},BitVector}) where Ty <: Complex
+                                 select::Union{Vector{Bool},BitVector}
+) where {Ty <: STypes}
     _ordschur!(copy(T), copy(Z), select)
 end
 
+function LinearAlgebra._ordschur(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+                                 Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
+                                 select::Union{Vector{Bool},BitVector}
+) where {Ty <: STypes}
+    _ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
+end
+
 function LinearAlgebra._ordschur!(T::StridedMatrix{Ty},
+                                  Z::StridedMatrix{Ty},
+                                  select::Union{Vector{Bool},BitVector}
+) where {Ty <: STypes}
+                                  gordschur!(T, Z, select)
+end
+
+function LinearAlgebra._ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+                    Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
+                    select::Union{Vector{Bool},BitVector}
+) where {Ty <: STypes}
+    gordschur!(S, T, Q, Z, select)
+end
+
+function gordschur!(F::Schur, select::Union{Vector{Bool},BitVector})
+    T,Z,λ = gordschur!(F.T, F.Z, select)
+    Schur(T,Z,λ)
+end
+function gordschur!(F::GeneralizedSchur, select::Union{Vector{Bool},BitVector})
+    S,T,α,β,Q,Z = gordschur!(F.S, F.T, F.Q, F.Z, select)
+    GeneralizedSchur(S,T,α,β,Q,Z)
+end
+
+# invariant subspace computations using complex Schur decompositions
+
+function gordschur!(T::StridedMatrix{Ty},
                     Z::StridedMatrix{Ty},
-                    select::Union{Vector{Bool},BitVector}) where Ty <: Complex
+                    select::Union{Vector{Bool},BitVector}
+) where {Ty <: Complex}
     # suppress most checks since this is an internal function expecting
     # components of a Schur object
     n = size(T,1)
@@ -31,10 +65,13 @@ function LinearAlgebra._ordschur!(T::StridedMatrix{Ty},
 end
 
 """
-reorder `T` by a unitary similarity transformation so that `T[iold,iold]`
+`_trexchange!(T,Z,iold,inew)`
+
+Given an upper triangular T and unitary Z, reorder `T` by a unitary similarity
+transformation so that `T[iold,iold]`
 is moved to `T[inew,inew]`. Also right-multiply `Z` by the same transformation.
 """
-function _trexchange!(T,Z,iold,inew)
+function _trexchange!(T::AbstractMatrix{Ty}, Z, iold, inew) where {Ty <: Complex}
     # this is Algorithm 7.6.1 in Golub & van Loan 4th ed.
     n = size(T,1)
     if (n < 1) || (iold == inew)
@@ -121,17 +158,12 @@ function subspacesep(S::Schur{Ty}, nsub) where Ty
     return scale / est
 end
 
-function LinearAlgebra._ordschur(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
-                                 Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
-                                 select::Union{Vector{Bool},BitVector}
-                                 ) where Ty <: Complex{Tr} where Tr <: AbstractFloat
-    _ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
-end
+# Reordering generalized Schur decompositions, Complex element type
 
-function LinearAlgebra._ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+function gordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
                     Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
                     select::Union{Vector{Bool},BitVector}
-                    ) where Ty <: Complex{Tr} where Tr <: AbstractFloat
+                    ) where {Ty <: Complex}
     n = size(S,1)
     ks = 0
     for k=1:n
@@ -147,7 +179,13 @@ function LinearAlgebra._ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
     S,T,diag(S),diag(T),Q,Z
 end
 
-function _trexchange!(A,B,Q,Z,iold,inew)
+"""
+`_trexchange!(A,B,Q,Z,iold,inew)`
+
+Move location `iold` to `inew` in a generalized Schur decomposition by unitary
+transformations.
+"""
+function _trexchange!(A::AbstractMatrix{Ty}, B, Q, Z, iold, inew) where {Ty <: Complex}
     if iold < inew
         icur = iold
         while icur < ilast
@@ -166,54 +204,59 @@ function _trexchange!(A,B,Q,Z,iold,inew)
     nothing
 end
 
-# swap adjacent 1x1 blocks in UT pair (A,B) via unitary equivalence transform
-# apply same transform to associated Q,Z
-function _trexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1) where Ty
+"""
+`_trexch2!(A,B,Q,Z,j1)`
+
+swap adjacent 1x1 blocks in UT pair (A,B) via unitary equivalence transform
+apply same transform to associated Q,Z
+"""
+function _trexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1;
+                   require_strong=false, throws=true
+) where {Ty <: STypes}
+    # based on ztgex2
+    # copy the block to try the swap
     S = A[j1:j1+1,j1:j1+1]
     T = B[j1:j1+1,j1:j1+1]
     # compute threshold for acceptance
     Tr = real(Ty)
     smlnum = safemin(Tr) / eps(Tr)
-    scale = zero(Tr)
-    sumsq = one(Tr)
     W = hcat(S,T)
-    scale, sumsq = _ssq(vec(W), scale, sumsq)
-    sa = scale * sqrt(sumsq)
+    sa = _safe_fnorm(vec(W))
     thresh = max(Tr(20)*eps(Tr)*sa, smlnum)
 
     # compute Givens rotations which would swap blocks
     # and tentatively do it
     f = S[2,2] * T[1,1] - T[2,2] * S[1,1]
     g = S[2,2] * T[1,2] - T[2,2] * S[1,2]
-    sa = abs(S[2,2])
-    sb = abs(T[2,2])
+    sa = abs(S[2,2]) * abs(T[1,1])
+    sb = abs(S[1,1]) * abs(T[2,2])
     cz, sz, _ = givensAlgorithm(g,f)
-    Gz2 = Givens(1,2,Ty(cz),-sz)
-    rmul!(S,adjoint(Gz2))
-    rmul!(T,adjoint(Gz2))
+    Gz1 = Givens(1,2,Ty(cz),-sz)
+    rmul!(S,adjoint(Gz1))
+    rmul!(T,adjoint(Gz1))
     if sa >= sb
         cq, sq, _ = givensAlgorithm(S[1,1],S[2,1])
     else
         cq, sq, _ = givensAlgorithm(T[1,1],T[2,1])
     end
-    Gq2 = Givens(1,2,Ty(cq),sq)
-    lmul!(Gq2,S)
-    lmul!(Gq2,T)
+    Gq1 = Givens(1,2,Ty(cq),sq)
+    lmul!(Gq1,S)
+    lmul!(Gq1,T)
     # weak stability test: subdiags <= O( ϵ norm((S,T),"F"))
     ws = abs(S[2,1]) + abs(T[2,1])
     weak_ok = ws <= thresh
 
     if !weak_ok
-        throw(IllConditionException(j1))
+        throws && throw(IllConditionException(j1))
+        return false
     end
 
-    if false
+    if require_strong
         # FIXME: not yet checked, needs example
 
         # Strong stability test
         # Supposedly equiv. to
         # |[A-Qᴴ*S*Z, B-Qᴴ*T*Z]| <= O(1) ϵ |[A,B]| in F-norm
-        # which appears rather strange
         Ss = copy(S)
         Ts = copy(T)
         Gz2 = Givens(1,2,Ty(cz),sz)
@@ -224,14 +267,12 @@ function _trexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1) where Ty
         lmul!(Gq2,Ts)
         Ss .-= A[j1:j1+1,j1:j1+1]
         Ts .-= B[j1:j1+1,j1:j1+1]
-        scale = zero(Tr)
-        sumsq = one(Tr)
         W = hcat(Ss,Ts)
-        scale, sumsq = _ssq(vec(W), scale, sumsq)
-        ss = scale * sqrt(sumsq)
+        ss = _safe_fnorm(vec(W))
         strong_ok = ss <= thresh
         if !strong_ok
-            throw(IllConditionException(j1))
+            throws && throw(IllConditionException(j1))
+            return false
         end
     end
 
@@ -245,4 +286,5 @@ function _trexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1) where Ty
     B[j1+1,j1] = zero(Ty)
     rmul!(Z,adjoint(Gz))
     rmul!(Q,adjoint(Gq))
+    return true
 end

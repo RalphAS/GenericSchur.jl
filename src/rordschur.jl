@@ -1,12 +1,6 @@
 using LinearAlgebra: reflector!
 
-function LinearAlgebra._ordschur(T::StridedMatrix{Ty},
-                    Z::StridedMatrix{Ty},
-                   select::Union{Vector{Bool},BitVector}) where Ty <: Real
-    _ordschur!(copy(T), copy(Z), select)
-end
-
-function LinearAlgebra._ordschur!(T::StridedMatrix{Ty},
+function gordschur!(T::StridedMatrix{Ty},
                     Z::StridedMatrix{Ty},
                     select::Union{Vector{Bool},BitVector}) where Ty <: Real
     # suppress most checks since this is an internal function expecting

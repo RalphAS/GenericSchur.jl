@@ -1,9 +1,10 @@
 name = "GenericSchur"
 uuid = "c145ed77-6b09-5dd9-b285-bf645a82121e"
-version = "0.5.6"
+version = "0.5.7-DEV"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MatrixFactorizations = "a3b82374-2e81-5b9e-98ce-41277c0e4c87"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [compat]

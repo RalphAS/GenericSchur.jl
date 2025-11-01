@@ -10,10 +10,7 @@ function checkord(A::Matrix{Ty}, tol=10) where {Ty<:Complex}
     for i=1:(n>>1)
         select[i] = false
     end
-    T2,Z2,v = invoke(LinearAlgebra._ordschur!,
-           Tuple{StridedMatrix{T}, StridedMatrix{T},
-                 Union{Vector{Bool},BitVector}} where T <: Complex,
-        T2,Z2,select)
+    T2,Z2,v = GenericSchur.gordschur!(T2,Z2,select)
 
     # usual tests for Schur
     @test all(tril(T2,-1) .== 0)
@@ -108,10 +105,7 @@ function checkord(A::Matrix{Ty}, tol=10) where {Ty<:Real}
             @warn "failed to find acceptable subset (class $icase) for checking ordschur"
             continue
         end
-        T2,Z2,v = invoke(LinearAlgebra._ordschur!,
-                         Tuple{StridedMatrix{T}, StridedMatrix{T},
-                               Union{Vector{Bool},BitVector}} where T <: Real,
-                         T2,Z2,select)
+        T2,Z2,v = GenericSchur.gordschur!(T2,Z2,select)
 
         # usual tests for Schur
         @test all(tril(T2,-2) .== 0)
