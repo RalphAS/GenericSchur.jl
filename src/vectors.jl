@@ -1,14 +1,25 @@
-# Compute right eigenvectors of a complex upper triangular matrix TT.
-# If Z is nontrivial, multiply by it to get eigenvectors of Z*TT*Z'.
-# based on LAPACK::ztrevc
-# Copyright:
-# Univ. of Tennessee
-# Univ. of California Berkeley
-# Univ. of Colorado Denver
-# NAG Ltd.
+# This file is part of GenericSchur.jl, released under the MIT "Expat" license
+# Portions derived from LAPACK, see below.
+
+# Eigenvectors
+
+"""
+`_geigvecs!(T[,Z])`
+
+Compute right eigenvectors of a complex upper triangular matrix `T`.
+If another matrix `Z` is provided, multiply by it to get eigenvectors of `Zᵀ T Z`.
+Typically `T` and `Z` are components of a Schur decomposition.
+Temporarily mutates `T`.
+"""
 function _geigvecs!(TT::StridedMatrix{T},
                     Z::StridedMatrix{T}=Matrix{T}(undef,0,0)
                     ) where {T <: Complex}
+    # based on LAPACK::ztrevc
+    # Copyright:
+    # Univ. of Tennessee
+    # Univ. of California Berkeley
+    # Univ. of Colorado Denver
+    # NAG Ltd.
     n = size(TT,1)
     RT = real(T)
     ulp = eps(RT)
@@ -83,15 +94,23 @@ function _geigvecs!(TT::StridedMatrix{T},
     vectors
 end
 
-# based on LAPACK::ztrevc
-# Copyright:
-# Univ. of Tennessee
-# Univ. of California Berkeley
-# Univ. of Colorado Denver
-# NAG Ltd.
+"""
+`_gleigvecs!(T[,Z])`
+
+Compute left eigenvectors of a complex upper triangular matrix `T`.
+If another matrix `Z` is provided, multiply by it to get eigenvectors of `Zᵀ T Z`.
+Typically `T` and `Z` are components of a Schur decomposition.
+Temporarily mutates `T`.
+"""
 function _gleigvecs!(TT::StridedMatrix{T},
                     Z::StridedMatrix{T}=Matrix{T}(undef,0,0)
                     ) where {T <: Complex}
+    # based on LAPACK::ztrevc
+    # Copyright:
+    # Univ. of Tennessee
+    # Univ. of California Berkeley
+    # Univ. of Colorado Denver
+    # NAG Ltd.
     n = size(TT,1)
     RT = real(T)
     ulp = eps(RT)
@@ -164,3 +183,162 @@ function _gleigvecs!(TT::StridedMatrix{T},
 
     vectors
 end
+
+"""
+`_geigvecs(S, T [,Z])`
+
+Compute right eigenvectors of a matrix pair `S, T` where `S` is [quasi-]upper triangular
+and `T` is upper triangular.
+If another matrix `Z` is provided, multiply by it to get eigenvectors of
+`Qᵀ S Z` and `Qᵀ T Z`.
+Typically `S`, `T` and `Z` are components of a generalized Schur decomposition.
+"""
+function _geigvecs end
+
+# right eigenvectors, complex generalized case
+function _geigvecs(S::StridedMatrix{T}, P::StridedMatrix{T},
+                    Z::StridedMatrix{T}=Matrix{T}(undef,0,0)
+                    ) where {T <: Complex}
+    # translated from LAPACK::ztgevc
+    # Copyright:
+    # Univ. of Tennessee
+    # Univ. of California Berkeley
+    # Univ. of Colorado Denver
+    # NAG Ltd.
+    n = size(S,1)
+    RT = real(T)
+    ulp = eps(RT)
+    safmin = safemin(RT)
+    smallnum = safmin * (n / ulp)
+    bigx = one(RT) / smallnum
+    bignum = one(RT) / (n * safmin)
+
+    vectors = Matrix{T}(undef,n,n)
+    v = zeros(T,n)
+    if size(Z,1) > 0
+        v2 = zeros(T,n)
+    end
+
+    # We use the 1-norms of the strictly upper part of S, P columns
+    # to avoid overflow
+    anorm = abs1(S[1,1])
+    bnorm = abs1(P[1,1])
+    snorms = zeros(RT,n)
+    pnorms = zeros(RT,n)
+    @inbounds for j=2:n
+        for i=1:j-1
+            snorms[j] += abs1(S[i,j])
+            pnorms[j] += abs1(P[i,j])
+        end
+        anorm = max(anorm,snorms[j] + abs1(S[j,j]))
+        bnorm = max(bnorm,pnorms[j] + abs1(P[j,j]))
+    end
+    ascale = one(RT) / max(anorm, safmin)
+    bscale = one(RT) / max(bnorm, safmin)
+
+    idx = n+1
+    for ki=n:-1:1
+        idx -= 1
+        if abs1(S[ki,ki]) <= safmin && abs(real(P[ki,ki])) <= safmin
+            # singular pencil; return unit eigenvector
+            vectors[:,idx] .= zero(T)
+            vectors[idx,idx] = one(T)
+        else
+            # compute coeffs a,b in (a A - b B) x = 0
+            t = 1 / max(abs1(S[ki,ki]) * ascale,
+                        abs(real(P[ki,ki])) * bscale, safmin)
+            sα = (t * S[ki,ki]) * ascale
+            sβ = (t * real(P[ki,ki])) * bscale
+            acoeff = sβ * ascale
+            bcoeff = sα * bscale
+            # scale to avoid underflow
+
+            lsa = abs(sβ) >= safmin && abs(acoeff) < smallnum
+            lsb = abs1(sα) >= safmin && abs1(bcoeff) < smallnum
+            s = one(RT)
+            if lsa
+                s = (smallnum / abs(sβ)) * min(anorm, bigx)
+            end
+            if lsb
+                s = max(s, (smallnum / abs1(sα)) * min(bnorm, bigx))
+            end
+            if lsa || lsb
+                s = min(s, 1 / (safmin * max( one(RT), abs(acoeff),
+                                              abs1(bcoeff))))
+                if lsa
+                    acoeff = ascale * (s * sβ)
+                else
+                    acoeff *= s
+                end
+                if lsb
+                    bcoeff = bscale * (s * sα)
+                else
+                    bcoeff *= s
+                end
+            end
+            aca = abs(acoeff)
+            acb = abs1(bcoeff)
+            xmax = one(RT)
+            v .= zero(T)
+            dmin = max(ulp * aca * anorm, ulp * acb * bnorm, safmin)
+
+            # triangular solve of (a A - b B) x = 0, columnwise
+            # v[1:j-1] contains sums w
+            # v[j+1:ki] contains x
+
+            v[1:ki-1] .= acoeff * S[1:ki-1,ki] - bcoeff * P[1:ki-1,ki]
+            v[ki] = one(T)
+
+            for j=ki-1:-1:1
+                # form x[j] = -v[j] / d
+                # with scaling and perturbation
+                d = acoeff * S[j,j] - bcoeff * P[j,j]
+                if abs1(d) <= dmin
+                    d = complex(dmin)
+                end
+                if abs1(d) < one(RT)
+                    if abs1(v[j]) >= bignum * abs1(d)
+                        t = 1 / abs1(v[j])
+                        v[1:ki] *= t
+                    end
+                end
+                v[j] = -v[j] / d
+                if j > 1
+                    # w = w + x[j] * (a S[:,j] - b P[:,j]) with scaling
+
+                    if abs1(v[j]) > one(RT)
+                        t = 1 / abs1(v[j])
+                        if aca * snorms[j] + acb * pnorms[j] >= bignum * t
+                            v[1:ki] *= t
+                        end
+                    end
+                    ca = acoeff * v[j]
+                    cb = bcoeff * v[j]
+                    v[1:j-1] += ca * S[1:j-1,j] - cb * P[1:j-1,j]
+                end
+            end # for j (solve loop)
+            if size(Z,1) > 0
+                mul!(v2, Z, v)
+                v, v2 = v2, v
+                iend = n
+            else
+                iend = ki
+            end
+
+            xmax = zero(RT)
+            for jr=1:iend
+                xmax = max(xmax, abs1(v[jr]))
+            end
+            if xmax > safmin
+                t = 1 / xmax
+                vectors[1:iend,idx] .= t * v[1:iend]
+            else
+                iend = 0
+            end
+            vectors[iend+1:n,idx] .= zero(T)
+        end # nonsingular branch
+    end # index loop
+
+    return vectors
+end # function
+

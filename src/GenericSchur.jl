@@ -15,9 +15,11 @@ export triangularize, eigvalscond, subspacesep, balance!
 
 const STypes = Union{AbstractFloat, Complex{T} where T<:AbstractFloat}
 
-using LinearAlgebra: eigsortby, sorteig!
+using LinearAlgebra: eigsortby, sorteig!, checksquare
+using LinearAlgebra: RealHermSymComplexHerm, Algorithm, QRIteration, Givens
+using Printf
 
-using LinearAlgebra: checksquare
+using Base: require_one_based_indexing
 
 """
     UnconvergedException
@@ -43,6 +45,8 @@ struct IllConditionException <: Exception
     index::Integer
 end
 
+# Pirated methods
+
 schur!(A::StridedMatrix{T}; kwargs...) where {T <: STypes} = gschur!(A; kwargs...)
 
 function eigvals!(A::StridedMatrix{T};
@@ -65,7 +69,7 @@ Eigenvectors are returned as columns of a matrix, ordered to match `S.values`.
 The returned eigenvectors have unit Euclidean norm, and the largest
 elements are real.
 """
-function LinearAlgebra.eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFloat}
+function eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFloat}
     if left
         v = _gleigvecs!(S.T,S.Z)
     else
@@ -73,6 +77,15 @@ function LinearAlgebra.eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T 
     end
     _enormalize!(v)
     v
+end
+
+function eigvecs(S::GeneralizedSchur{Complex{T}}; left::Bool=false
+) where {T <: AbstractFloat}
+    left && throw(ArgumentError("not implemented"))
+    v = _geigvecs(S.S, S.T, S.Z)
+    # CHECKME: Euclidean norm differs from LAPACK, so wait for upstream.
+    # _enormalize!(v)
+    return v
 end
 
 function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
@@ -173,8 +186,6 @@ function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
     end
 end
 
-using LinearAlgebra: RealHermSymComplexHerm, Algorithm, QRIteration
-
 function eigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix};
                               alg::Algorithm = QRIteration(),
                               kwargs...)
@@ -199,15 +210,11 @@ function eigvals!(A::SymTridiagonal{<:AbstractFloat};
     geigvals!(A, alg; kwargs...)
 end
 
-# The variants should be defined here for logical coherence, but not until
+# Some variants should be defined here for logical coherence, but not until
 # we've registered nontrivial implementations.
+
 ############################################################################
 # Internal implementations follow
-
-using LinearAlgebra: Givens
-using Printf
-
-using Base: require_one_based_indexing
 
 """
 geigen!(A, alg=QRIteration(); sortby=eigsortby) -> E::Eigen
