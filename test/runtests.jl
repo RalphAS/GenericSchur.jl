@@ -44,6 +44,7 @@ function godunov(T)
     A,vals,econd
 end
 # temporarily up front
+include("generalized.jl")
 include("gordschur.jl")
 
 include("complex.jl")
@@ -55,7 +56,7 @@ include("real.jl")
 
 include("ordschur.jl")
 
-include("generalized.jl")
+# include("generalized.jl")
 # include("gordschur.jl")
 
 include("errors.jl")

@@ -88,6 +88,17 @@ function eigvecs(S::GeneralizedSchur{Complex{T}}; left::Bool=false
     return v
 end
 
+function eigvecs(S::GeneralizedSchur{T}; left::Bool=false) where {T <: AbstractFloat}
+    if left
+        v = _gleigvecs(S.S, S.T, S.Q)
+    else
+        v = _geigvecs(S.S, S.T, S.Z)
+    end
+    # CHECKME: Euclidean norm differs from LAPACK, so wait for upstream.
+    # _enormalize!(v)
+    return v
+end
+
 function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
                 sortby::Union{Function,Nothing}=eigsortby, kwargs...
                 ) where {T <: STypes}

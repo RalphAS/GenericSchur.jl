@@ -58,7 +58,13 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
     # test 3: S.Z and S.Q are unitary
     @test norm(I - S.Z * S.Z') / (n * ulp) < tol
     @test norm(I - S.Q * S.Q') / (n * ulp) < tol
-    # TODO: eigvecs when we provide them
+
+    VR = eigvecs(S)
+    evcheck = norm((A * VR) * diagm(0 => S.β) - (B * VR) * diagm(0 => S.α))
+    @test evcheck / (n*norm(A) * ulp) < tol
+    VL = eigvecs(S, left=true)
+    evcheck = norm(diagm(0 => S.β) * (VL' * A)  - diagm(0 => S.α) * (VL' * B))
+    @test evcheck / (n*norm(A) * ulp) < tol
 end
 
 @testset "generalized basic sanity $T" for T in [ComplexF64,

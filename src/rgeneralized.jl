@@ -195,7 +195,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                                     H[jch,jch-1] *= c
                                 end
                                 have2_H_0sd = false
-                                if abs1(B[jch+1, jch+1]) > btol
+                                if abs(B[jch+1, jch+1]) > btol
                                     if jch+1 >= ilast
                                         br = :br_deflate_ilast
                                         break

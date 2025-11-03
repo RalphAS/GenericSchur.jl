@@ -647,3 +647,17 @@ function _xlinsolve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
     end
     return b, unperturbed, scale
 end
+
+# Solve (a * A - (br+im*bi) * D) * X = s * B
+# where A and D are na×na real matrices, D is diagonal, a is real
+# X and B are complex vectors of length na
+# Used by real generalized eigvecs().
+# FIXME: naive placeholder for now
+# eventually implement scheme from dlaln2 to avoid overflow
+function _xsolve(a,A::AbstractMatrix{Ty},Dd,br,bi,B) where {Ty}
+    s = one(Ty)
+    na = size(A,1)
+    x = (a * A - Diagonal((br+im*bi) * Dd)) \ B
+    xnorm = norm(x)
+    return s, x, xnorm
+end
