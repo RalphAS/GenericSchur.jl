@@ -60,15 +60,14 @@ function trsylvester!(A::StridedMatrix{T},B::StridedMatrix{T},
         for i=m:-1:1
             # build 2x2 problem
             Z = [A[i,i] -B[j,j]; D[i,i] -E[j,j]]
-            # TODO: replace lu with port of zgetc2
-            fZ = lu(Z)
             rhs = [C[i,j]; F[i,j]]
-            # TODO: use safe solver, yielding scaloc; apply scaloc to C and F
-            # scale *= scaloc
-            x = fZ \ rhs
-
+            x, unperturbed, scl = _safe_lu_solve!(Z, rhs)
             C[i,j] = x[1]
             F[i,j] = x[2]
+            if scl != 1
+                lmul!(view(C, 1:m, k), scl)
+                lmul!(view(F, 1:m, k), scl)
+            end
             # substitute R[i,j], L[i,j] into remaining eq
             if i > 1
                 α = -x[1]

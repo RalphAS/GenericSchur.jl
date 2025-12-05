@@ -555,7 +555,7 @@ function _enormalize!(v::AbstractMatrix{T}) where T <: STypes
 end
 
 """
-`x, unperturbed, scale = _xlinsolve!(A,b)`
+`x, unperturbed, scale = _safe_lu_solve!(A,b)`
 
 solve a linear algebraic problem `A * x = b` for a single vector `b`
 using LU decomposition with complete pivoting, scaling to mitigate overflow,
@@ -563,18 +563,19 @@ and perturbation to circumvent singularity.
 Destroys `A` and overwrites `b` with the solution `x`.
 
 """
-function _xlinsolve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
+function _safe_lu_solve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
     n = checksquare(A)
     unperturbed = true
-    smallnum = floatmin(T) / eps(T)
+    RT = real(T)
+    smallnum = floatmin(RT) / eps(RT)
     smin = maximum(abs, A)
-    smin = max(eps(T) * smin, smallnum)
+    smin = max(eps(RT) * smin, smallnum)
     # perform elimination
     ipsv, jpsv = 0,0
     jpiv = fill(0,n)
     # ipiv = fill(0,n)
     for i = 1:n-1
-        xmax = zero(T)
+        xmax = zero(RT)
         for ip = i:n
             for jp = i:n
                 if abs(A[ip,jp]) >= xmax
@@ -618,7 +619,7 @@ function _xlinsolve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
     end
     jpiv[n] = n
     # ipiv[n] = n
-    scale = one(T)
+    scale = one(RT)
     a = 8smallnum
     needscl = false
     for i in 1:n
@@ -628,7 +629,7 @@ function _xlinsolve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
         end
     end
     if needscl
-        scale = (1 / T(8)) / maximum(abs, b)
+        scale = (1 / RT(8)) / maximum(abs, b)
         b .*= scale
     end
     for i=1:n
@@ -657,7 +658,8 @@ end
 function _xsolve(a,A::AbstractMatrix{Ty},Dd,br,bi,B) where {Ty}
     s = one(Ty)
     na = size(A,1)
-    x = (a * A - Diagonal((br+im*bi) * Dd)) \ B
+    # x = (a * A - Diagonal((br+im*bi) * Dd)) \ B
+    x,_,s = _safe_lu_solve!(a * A - Diagonal((br+im*bi) * Dd), B)
     xnorm = norm(x)
     return s, x, xnorm
 end
