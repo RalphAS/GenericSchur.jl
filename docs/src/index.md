@@ -101,13 +101,15 @@ The generalized Schur decomposition is provided [via `schur(A,B)`, or `ggschur!(
 for real and complex element types. No specific implementations are currently provided
 for Hermitian/Symmetric problems.
 
-Eigenvectors are also available for complex element types, via
+Right eigenvectors are available for complex element types, and both right and
+left for real element types, via
 `eigvecs(S::GeneralizedSchur)`.
 
 ## Reordering
-An invariant (viz. deflating) subspace may be extracted via the `ordschur` function.
-This package provides this for ordinary Schur factorizations (real and complex) and
-for complex generalized Schur factorizations.
+An invariant (viz. deflating) subspace may be extracted via methods of the
+`LinearAlgebra.ordschur` function; see the documentation in the LinearAlgebra stdlib.
+This package provides this for ordinary and generalized Schur factorizations, both
+real and complex element types.
 
 ## Acknowledgements
 

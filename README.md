@@ -23,10 +23,10 @@ LAPACK, such as `Complex{BigFloat}, Complex{Float128}` (from
 Quadmath.jl), etc.  For these, the `schur!`, `eigvals!`, and `eigen!`
 functions in the `LinearAlgebra` standard library are overloaded here,
 and may be accessed through the usual `schur`, `eigvals`, and `eigen`
-wrappers:
+wrappers. For example:
 
 ```julia
-A = your_matrix_generator()
+A = BigFloat.(your_matrix_generator())
 S = schur(A)
 ```
 The result `S` is a `LinearAlgebra.Schur` object, with the properties `T`,
@@ -85,7 +85,6 @@ functions with matrix arguments whose element type `T <: Real`.
 The result is in standard form, so
 pair-blocks (and therefore rank-2 invariant subspaces) should be fully resolved.
 
-
 Eigenvectors are not currently available for the "real Schur" forms.
 But don't despair; one can convert a standard quasi-triangular real `Schur`
 into a complex `Schur` with the `triangularize` function provided here.
@@ -111,26 +110,28 @@ yet exploit this opportunity for reduced workload.
 Methods for reordering a Schur decomposition (`ordschur`) and computing
 condition numbers (`eigvalscond`) and subspace separation (`subspacesep`)
 are provided.
-Tests to date suggest that behavior is analogous
+Tests to date suggest that behavior is similar
 to the LAPACK routines on which the implementation is based.
 
 
 ## Generalized eigensystems
 
 Methods for the generalized eigenvalue problem (matrix pencils) are provided,
-as extensions of `schur(A,B)` from LinearAlgebra.
+as extensions of `schur!(A,B)` from LinearAlgebra.
 The algorithms are translated from LAPACK, but this implementation has
 had limited testing. (Note that it is easy to check the decomposition
 of a particular case ex post facto.)
 
-Corresponding functions for reordering and condition
-estimation are included for complex element types.
-Tests to date suggest that behavior is analogous to LAPACK.
+Corresponding functions for reordering (via `ordschur`) and
+condition estimation (`eigvalscond`) are provided.
+Tests to date suggest that behavior is similar to LAPACK.
 
 Right eigenvectors of complex generalized problems are available with
-`V = eigvecs(S::GeneralizedSchur{<:Complex})`. Column `j` of `V` satisfies
-`S.beta[j] * A * v ≈ S.alpha[j] * B * v`.
-These currently have a peculiar norm intended to be compatible with LAPACK
+`eigvecs(S::GeneralizedSchur{<:Complex})`.
+Left and right eigenvectors of real generalized problems are available with
+`eigvecs(S::GeneralizedSchur{<:Real}; left::Bool)`.
+
+These vectors currently have a peculiar normalization intended to be compatible with LAPACK
 conventions.
 
 ## Acknowledgements
