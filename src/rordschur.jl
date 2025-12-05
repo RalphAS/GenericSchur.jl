@@ -535,9 +535,18 @@ using MatrixFactorizations
 
 function gordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
                     Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
-                    select::Union{Vector{Bool},BitVector}
+                    select::Union{Vector{Bool},BitVector};
+                    scale::Bool=true
                     ) where Ty <: AbstractFloat
     n = size(S,1)
+    if scale
+        scaleA, cscale, anrm = _scale!(S)
+        scaleB, cscaleb, bnrm = _scale!(T)
+    else
+        scaleA = false
+        scaleB = false
+    end
+
     safmin = floatmin(Ty)
     # logic from dtgsen
     ks = 0
@@ -568,6 +577,13 @@ function gordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
             end
         end
     end
+    if scaleA
+        safescale!(S, cscale, anrm)
+    end
+    if scaleB
+        safescale!(T, cscaleb, bnrm)
+    end
+
     # in case of poor conditioning, eigvals may be significantly modified
     # so recomputation is advised and standardization may be needed
     inpair = false
@@ -773,7 +789,7 @@ function _swap1or2!(A::AbstractMatrix{Ty}, B, Q, Z, j1, n1, n2;
                                             view(T,i2:m,i2:m),
                                             view(T,1:n1,i2:m)
         )
-        @mydebug unpert || println("numerically singular Sylvester was perturbed")
+        @mydebug unpert || println("  numerically singular Sylvester was perturbed")
 
         # use solution to get swapping transformations
         LI = vcat(-XL, scale * I(n2))
@@ -805,13 +821,13 @@ function _swap1or2!(A::AbstractMatrix{Ty}, B, Q, Z, j1, n1, n2;
         bqr_a21 = _safe_fnorm(view(s2b,n2+1:m,1:n2))
 
         # weak stability test
-        if min(bqr_a21, brq_a21) > thresh
-            @mydebug println("failed weak stability test")
+        @mydebug println("  weak test: |A21| from qr(B): $bqr_a21: from rq(B): $brq_a21")
+        if !(min(bqr_a21, brq_a21) <= thresh)
+            @mydebug println("  failed weak stability test")
             return false
         end
 
         # decide which is preferable
-        @mydebug println(" |A21| from qr(B): $bqr_a21: from rq(B): $brq_a21")
         if (bqr_a21 <= brq_a21)
             s_new = s2b
             t_new = t2b
@@ -827,8 +843,9 @@ function _swap1or2!(A::AbstractMatrix{Ty}, B, Q, Z, j1, n1, n2;
         if require_strong
             resa = _safe_fnorm(A[j1:je,j1:je] - q_new * s_new * z_new)
             resb = _safe_fnorm(B[j1:je,j1:je] - q_new * t_new * z_new)
-            if !(resa <= thresh && resb <= threshb)
-                @mydebug println("failed strong stability test resA=$resa resB=$resb")
+            @mydebug println("  strong test: resA=$resa resB=$resb [thresh $thresh, $threshb]")
+            if !(resa <= thresh && resb <= threshb) # also catches NaN
+                @mydebug println("  failed strong stability test")
                 return false
             end
         end
@@ -1034,8 +1051,8 @@ solve A R - L B = scale * C; D R - L E = scale * F
 where orders are small and coeffts are generalized Schur forms
 """
 function _syl1or2(A::AbstractMatrix{Ty}, B, C, D, E, F) where {Ty}
-    # eventually translate portions of dtgsy2
-    # use naive Kronecker scheme until we have time to do this...
+    # we may want to use a specific inline scheme (cf. dtgsy2)
+    # use simpler explicit Kronecker scheme until we have reason to do so
     n1 = checksquare(A)
     n2 = checksquare(B)
     dimsok = ((size(F) == (n1,n2)) && (size(C) == (n1,n2))
@@ -1044,7 +1061,7 @@ function _syl1or2(A::AbstractMatrix{Ty}, B, C, D, E, F) where {Ty}
 
     K = [kron(I(n2), A) kron(-B', I(n1)); kron(I(n2), D) kron(-E', I(n1))]
     rl = vcat(vec(C), vec(F))
-    rl,unperturbed,scale = _xlinsolve!(K, rl)
+    rl,unperturbed,scale = _safe_lu_solve!(K, rl)
     xnorm = maximum(abs, rl)
     nn = n1 * n2
     R = reshape(rl[1:nn], n1, n2)
@@ -1080,17 +1097,25 @@ function _rtrexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1;
     rmul!(S,adjoint(Gz1))
     rmul!(T,adjoint(Gz1))
     if sa >= sb
-        cq, sq, _ = givensAlgorithm(S[1,1],S[2,1])
+        fq, gq = S[1,1], S[2,1]
     else
-        cq, sq, _ = givensAlgorithm(T[1,1],T[2,1])
+        fq, gq = T[1,1], T[2,1]
+    end
+    if sz != 0 && fq == 0 && gq == 0
+        # patch for continuity (edge case, not handled thus in LAPACK)
+        # CHECKME: the condition may not be optimal
+        cq, sq = zero(Ty), one(Ty)
+    else
+        cq, sq, _ = givensAlgorithm(fq, gq)
     end
     Gq1 = Givens(1,2,Ty(cq),sq)
     lmul!(Gq1,S)
     lmul!(Gq1,T)
     # weak stability test: subdiags <= O( ϵ norm((S,T),"F"))
     ws = abs(S[2,1]) + abs(T[2,1])
-    if ws > thresh
-        @mydebug println("failed weak stability test; subdiag norm = $ws")
+    @mydebug println("  weak test: subdiag norm = $ws")
+    if !(ws <= thresh)
+        @mydebug println("  failed weak stability test")
         throws && throw(IllConditionException(j1))
         return false
     end
@@ -1111,8 +1136,9 @@ function _rtrexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1;
         Ts .-= B[j1:j1+1,j1:j1+1]
         W = hcat(Ss,Ts)
         ss = _safe_fnorm(vec(W))
-        if ss > thresh
-            @mydebug println("failed strong stability test resid=$ss")
+        @mydebug println("  strong test resid=$ss [thresh=$thresh]")
+        if !(ss <= thresh)
+            @mydebug println("  failed strong stability test")
             throws && throw(IllConditionException(j1))
             return false
         end

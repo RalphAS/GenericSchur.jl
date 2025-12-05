@@ -512,7 +512,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                   a2i = szi * a22
                   cq = hypot(a1r, a1i)
                   if cq <= safmin
-                      c1 = zero(T)
+                      cq = zero(T)
                       sqr = one(T)
                       sqi = zero(T)
                   else
