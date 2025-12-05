@@ -164,8 +164,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     while true
         niter += 1
         if niter > maxiter
-            @warn "convergence failure; factorization incomplete at ilast=$ilast"
-            break
+            throw(UnconvergedException("iteration limit $maxiter reached"))
         end
 
         # warning: _istart, ifirst, ilast are as in LAPACK, not GLA
