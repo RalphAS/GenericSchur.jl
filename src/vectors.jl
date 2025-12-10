@@ -410,8 +410,8 @@ function _geigvecs(S::StridedMatrix{Ty}, P::StridedMatrix{Ty},
             if abs(S[je,je]) <= safmin && abs(P[je,je]) <= safmin
                 # singular pencil; return unit eigenvector
                 idx -= 1
-                vectors[:,idx] .= zero(T)
-                vectors[idx,idx] = one(T)
+                vectors[:,idx] .= zero(Ty)
+                vectors[idx,idx] = one(Ty)
                 continue
             end
 
@@ -634,8 +634,8 @@ function _gleigvecs(S::StridedMatrix{Ty}, P::StridedMatrix{Ty},
             if abs(S[je,je]) <= safmin && abs(P[je,je]) <= safmin
                 # singular pencil; return unit eigenvector
                 idx += 1
-                vectors[:,idx] .= zero(T)
-                vectors[idx,idx] = one(T)
+                vectors[:,idx] .= zero(Ty)
+                vectors[idx,idx] = one(Ty)
                 continue
             end
 
