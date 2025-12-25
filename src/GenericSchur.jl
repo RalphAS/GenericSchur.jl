@@ -79,16 +79,7 @@ function eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFlo
     v
 end
 
-function eigvecs(S::GeneralizedSchur{Complex{T}}; left::Bool=false
-) where {T <: AbstractFloat}
-    left && throw(ArgumentError("not implemented"))
-    v = _geigvecs(S.S, S.T, S.Z)
-    # CHECKME: Euclidean norm differs from LAPACK, so wait for upstream.
-    # _enormalize!(v)
-    return v
-end
-
-function eigvecs(S::GeneralizedSchur{T}; left::Bool=false) where {T <: AbstractFloat}
+function eigvecs(S::GeneralizedSchur{T}; left::Bool=false) where {T <: STypes}
     if left
         v = _gleigvecs(S.S, S.T, S.Q)
     else

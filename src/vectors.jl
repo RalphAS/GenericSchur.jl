@@ -353,6 +353,154 @@ function _geigvecs(S::StridedMatrix{T}, P::StridedMatrix{T},
     return vectors
 end # function
 
+# left eigenvectors, complex generalized case
+function _gleigvecs(S::StridedMatrix{T}, P::StridedMatrix{T},
+                    Z::StridedMatrix{T}=Matrix{T}(undef,0,0)
+                    ) where {T <: Complex}
+    # translated from LAPACK::ztgevc
+    # Copyright:
+    # Univ. of Tennessee
+    # Univ. of California Berkeley
+    # Univ. of Colorado Denver
+    # NAG Ltd.
+    n = size(S,1)
+    RT = real(T)
+    ulp = eps(RT)
+    safmin = safemin(RT)
+    smallnum = safmin * (n / ulp)
+    bigx = one(RT) / smallnum
+    bignum = one(RT) / (n * safmin)
+
+    vectors = Matrix{T}(undef,n,n)
+    v = zeros(T,n)
+    if size(Z,1) > 0
+        v2 = zeros(T,n)
+    end
+
+    # We use the 1-norms of the strictly upper part of S, P columns
+    # to avoid overflow
+    anorm = abs1(S[1,1])
+    bnorm = abs1(P[1,1])
+    snorms = zeros(RT,n)
+    pnorms = zeros(RT,n)
+    @inbounds for j=2:n
+        for i=1:j-1
+            snorms[j] += abs1(S[i,j])
+            pnorms[j] += abs1(P[i,j])
+        end
+        anorm = max(anorm,snorms[j] + abs1(S[j,j]))
+        bnorm = max(bnorm,pnorms[j] + abs1(P[j,j]))
+    end
+    ascale = one(RT) / max(anorm, safmin)
+    bscale = one(RT) / max(bnorm, safmin)
+
+    idx = 0
+    for je=1:n
+        idx += 1
+        if abs1(S[je,je]) <= safmin && abs(real(P[je,je])) <= safmin
+            # singular pencil; return unit eigenvector
+            vectors[:,idx] .= zero(T)
+            vectors[idx,idx] = one(T)
+        else
+            # compute coeffs a,b in y' (a A - b B) = 0
+            t = 1 / max(abs1(S[je,je]) * ascale,
+                        abs(real(P[je,je])) * bscale, safmin)
+            sα = (t * S[je,je]) * ascale
+            sβ = (t * real(P[je,je])) * bscale
+            acoeff = sβ * ascale
+            bcoeff = sα * bscale
+            # scale to avoid underflow
+
+            lsa = abs(sβ) >= safmin && abs(acoeff) < smallnum
+            lsb = abs1(sα) >= safmin && abs1(bcoeff) < smallnum
+            s = one(RT)
+            if lsa
+                s = (smallnum / abs(sβ)) * min(anorm, bigx)
+            end
+            if lsb
+                s = max(s, (smallnum / abs1(sα)) * min(bnorm, bigx))
+            end
+            if lsa || lsb
+                s = min(s, 1 / (safmin * max( one(RT), abs(acoeff),
+                                              abs1(bcoeff))))
+                if lsa
+                    acoeff = ascale * (s * sβ)
+                else
+                    acoeff *= s
+                end
+                if lsb
+                    bcoeff = bscale * (s * sα)
+                else
+                    bcoeff *= s
+                end
+            end
+            aca = abs(acoeff)
+            acb = abs1(bcoeff)
+            xmax = one(RT)
+            v .= zero(T)
+            v[je] = one(T)
+            dmin = max(ulp * aca * anorm, ulp * acb * bnorm, safmin)
+
+            # triangular solve of (a A - b B)' y = 0
+            v[je] = one(T)
+
+            for j=je+1:n
+                # compute ∑  (s Sₖⱼ - b Pₖⱼ)' x
+                t = 1 / xmax
+                if aca * snorms[j] + acb * pnorms[j] > bignum * t
+                    v[je:j-1] *= t
+                    xmax = one(RT)
+                end
+                suma = zero(T)
+                sumb = zero(T)
+                for jr=je:j-1
+                    suma += conj(S[jr,j]) * v[jr]
+                    sumb += conj(P[jr,j]) * v[jr]
+                end
+                sumx = acoeff * suma - conj(bcoeff) * sumb
+
+                # form x[j] = -sumx / (a Sⱼⱼ - b Pⱼⱼ)
+                # with scaling and perturbation
+                d = conj(acoeff * S[j,j] - bcoeff * P[j,j])
+                if abs1(d) <= dmin
+                    d = complex(dmin)
+                end
+                if abs1(d) < one(RT)
+                    if abs1(sumx) >= bignum * abs1(d)
+                        t = 1 / abs1(sumx)
+                        v[je:j-1] *= t
+                        xmax *= t
+                        sumx *= t
+                    end
+                end
+                v[j] = -sumx / d
+                xmax = max(xmax, abs1(v[j]))
+            end # for j (solve loop)
+            if size(Z,1) > 0
+                mul!(v2, Z, v)
+                v, v2 = v2, v
+                ibegin = 1
+            else
+                ibegin = je
+            end
+
+            xmax = zero(RT)
+            for jr=ibegin:n
+                xmax = max(xmax, abs1(v[jr]))
+            end
+            if xmax > safmin
+                t = 1 / xmax
+                vectors[ibegin:n,idx] .= t * v[ibegin:n]
+            else
+                ibegin = n + 1
+            end
+            vectors[1:ibegin-1,idx] .= zero(T)
+        end # nonsingular branch
+    end # index loop
+
+    return vectors
+end
+
 # right eigenvectors of real generalized Schur
 function _geigvecs(S::StridedMatrix{Ty}, P::StridedMatrix{Ty},
                     Z::StridedMatrix{Ty}=Matrix{Ty}(undef,0,0)

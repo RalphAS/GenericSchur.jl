@@ -35,7 +35,9 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
     VR = eigvecs(S)
     evcheck = norm((A * VR) * diagm(0 => S.β) - (B * VR) * diagm(0 => S.α))
     @test evcheck / (n*norm(A) * ulp) < tol
-    # someday maybe left eigenvectors too
+    VL = eigvecs(S, left=true)
+    evcheck = norm((A' * VL) * diagm(0 => conj.(S.β)) - (B' * VL) * diagm(0 => conj.(S.α)))
+    @test evcheck / (n*norm(A) * ulp) < tol
 end
 
 function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;

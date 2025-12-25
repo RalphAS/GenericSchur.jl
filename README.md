@@ -126,10 +126,8 @@ Corresponding functions for reordering (via `ordschur`) and
 condition estimation (`eigvalscond`) are provided.
 Tests to date suggest that behavior is similar to LAPACK.
 
-Right eigenvectors of complex generalized problems are available with
-`eigvecs(S::GeneralizedSchur{<:Complex})`.
-Left and right eigenvectors of real generalized problems are available with
-`eigvecs(S::GeneralizedSchur{<:Real}; left::Bool)`.
+Left and right eigenvectors of real and complex generalized problems are available with
+`eigvecs(S::GeneralizedSchur; left::Bool)`.
 
 These vectors currently have a peculiar normalization intended to be compatible with LAPACK
 conventions.

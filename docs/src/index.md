@@ -101,8 +101,7 @@ The generalized Schur decomposition is provided [via `schur(A,B)`, or `ggschur!(
 for real and complex element types. No specific implementations are currently provided
 for Hermitian/Symmetric problems.
 
-Right eigenvectors are available for complex element types, and both right and
-left for real element types, via
+Right and left eigenvectors are available for generalized problems, via
 `eigvecs(S::GeneralizedSchur)`.
 
 ## Reordering
