@@ -35,6 +35,9 @@ function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};
     if scale
         scaleA, cscale, anrm = _scale!(A)
         scaleB, cscaleb, bnrm = _scale!(B)
+        @mydebug if cscale != 1 || cscaleb != 1
+            println("ggschur! scaling by $cscale $cscaleb")
+        end
     else
         scaleA = false
         scaleB = false
@@ -80,7 +83,6 @@ end
 function _hessenberg!(A::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z;
                       ilo=1, ihi=size(A,1)
                       ) where T
-    n = checksquare(A)
     wantQ = !isempty(Q)
     wantZ = !isempty(Z)
 
@@ -122,7 +124,6 @@ end
 # B is upper-triangular
 # This is an internal routine so we don't check.
 function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
-               debug = false,
                ilo=1, ihi=size(H,1), maxiter=100*(ihi-ilo+1)
                ) where {T <: Complex}
     n = checksquare(H)
@@ -167,9 +168,6 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
             throw(UnconvergedException("iteration limit $maxiter reached"))
         end
 
-        # warning: _istart, ifirst, ilast are as in LAPACK, not GLA
-        # note zlartg(f,g,c,s,r) -> (c,s,r) = givensAlgorithm(f,g)
-
         # Split H if possible
         # Use 2 tests:
         # 1: H[j,j-1] == 0 || j=ilo
@@ -179,9 +177,12 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         deflate_H = false  # branch 60 in zhgeqz
         ns_Bblock_found = false # branch 70 in zhgeqz
 
+        # specialize for j==ilast
         if ilast == ilo
             deflate_H = true
-        elseif abs1(H[ilast,ilast-1]) < atol
+        elseif abs1(H[ilast,ilast-1]) < max(safmin,
+                                            ulp * (abs1(H[ilast, ilast])
+                                                   + abs1(H[ilast-1,ilast-1])))
             H[ilast, ilast-1] = 0
             deflate_H = true
         end
@@ -202,7 +203,9 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                     if j==ilo
                         split_test1 = true
                     else
-                        if abs1(H[j,j-1]) <= atol
+                        # once had <= atol here
+                        if abs1(H[j,j-1]) <= max(safmin,
+                                                 ulp * (abs1(H[j,j]) + abs1(H[j-1,j-1])))
                             H[j,j-1] = 0
                             split_test1 = true
                         end
@@ -369,32 +372,34 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
             ad12 = (ascale * H[ilast-1,ilast]) / b22
             ad22 = (ascale * H[ilast,ilast]) / b22
             abi22 = ad22 - u12 * ad21
-            t1 = half * (ad11 + abi22)
-            rtdisc = sqrt(t1^2 + ad12 * ad21 - ad11 * ad22)
-            t2 = real(t1 - abi22) * real(rtdisc) + imag(t1-abi22) * imag(rtdisc)
-            shift =  (t2 <= 0) ? (t1 + rtdisc) : (t1 - rtdisc)
-            if isnan(shift)
-                shift = zero(T)
-                @warn "logic error in generalized Schur, check results"
-                @mydebug println("NaN encountered bscale=$bscale " *
-                                 "b11=$(B[ilast-1,ilast-1]) " *
-                                 "b22=$(B[ilast,ilast])")
+            abi12 = ad12 - u12 * ad11
+            shift = abi22
+            t = sqrt(abi12) * sqrt(ad21)
+            t1 = abs1(t)
+            if t != 0
+                x = half * (ad11 - shift)
+                t2 = abs1(x)
+                t1 = max(t1, t2)
+                y = t1 * sqrt((x / t1)^2 + (t / t1)^2)
+                if t2 > 0 && (real(x / t2) * real(y) + imag(x / t2) * imag(y) < 0)
+                    y = -y
+                end
+                shift -= t * (t / (x + y))
             end
         else
-            # exceptional shift
+            # exceptional shifts
             # "Chosen for no particularly good reason" (LAPACK)
-            eshift += (ascale * H[ilast, ilast-1]) / (bscale * B[ilast-1, ilast-1])
-            if isnan(eshift)
-                @warn "logic error in generalized Schur, check results"
-                @mydebug println("NaN encountered bscale=$bscale " *
-                                 "b11=$(B[ilast-1,ilast-1]) ")
-                eshift = zero(T)
+            if shiftcount % 20 ==  0 && bscale * abs1(B[ilast, ilast]) > safmin
+                eshift += (ascale * H[ilast, ilast]) / (bscale * B[ilast, ilast])
+            else
+                eshift += (ascale * H[ilast, ilast-1]) / (bscale * B[ilast-1, ilast-1])
             end
             shift = eshift
         end
+        @assert !isnan(shift)
 
         # check for two consecutive small subdiagonals
-        local f1
+        local f1, _istart
         gotit = false
         for j=ilast-1:-1:ifirst+1
             _istart = j
@@ -419,8 +424,10 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
 
         # qz sweep
         @mydebug println("QZ sweep range $(_istart):$ilast shift=$shift")
+        # initial contribution to Q
         g2 = ascale*H[_istart+1, _istart]
-        c,s,t3 = givensAlgorithm(f1, g2)
+        c,s,_ = givensAlgorithm(f1, g2)
+
         for j=_istart:ilast-1
             if j > _istart
                     c,s,r = givensAlgorithm(H[j,j-1], H[j+1,j-1])
