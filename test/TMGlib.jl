@@ -3,8 +3,8 @@ module TMGlib
 export latme!, latmr!
 
 using LinearAlgebra
-import LinearAlgebra.BlasInt
-import LinearAlgebra.BLAS.@blasfunc
+using LinearAlgebra: BlasInt, checksquare
+using LinearAlgebra.BLAS: @blasfunc
 
 # CHECKME: routines linked here are included in many BLAS/LAPACK distributions
 # (OpenBLAS, MKL), but do we need to allow for others?
@@ -331,6 +331,51 @@ for (fname, elty, relty) in ((:zlatmr_, :ComplexF64, :Float64),
                   1,1,1,1,1,1)
             (info[] == 0) || error("info = $(info[]) from latmr")
             A, d, dl, dr, iseed
+        end
+    end
+end
+
+"""
+construct sets of matrices satisfying a generalized Sylvester system
+
+`A R - L B = C; D R - L E = F`
+
+and diagonalization conditions.
+"""
+function latm5! end
+
+for (fname, elty, relty) in ((:zlatm5_, :ComplexF64, :Float64),
+                             (:clatm5_, :ComplexF32, :Float32),
+                             (:dlatm5_, :Float64, :Float64),
+                             (:slatm5_, :Float32, :Float32))
+    @eval begin
+        function latm5!(prtype::Integer, A::StridedArray{$elty}, B::StridedArray{$elty},
+                        C::StridedArray{$elty}, D::StridedArray{$elty}, E::StridedArray{$elty},
+                        F::StridedArray{$elty}, R::StridedArray{$elty}, L::StridedArray{$elty},
+                        alpha, qblocka, qblockb
+        )
+            m = checksquare(A)
+            lda = m
+            n = checksquare(B)
+            ldb = n
+            # FIXME: ensure D is mxm, E is nxn; C,F,R,L are mxn
+            ldd,dle = m,n
+            ldc,ldf,ldr,ldl = m,m,m,m
+            ccall((@blasfunc($fname), liblapack), Cvoid,
+                  (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
+                      Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                      Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                      Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                      Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                      Ref{$relty}, Ref{BlasInt}, Ref{BlasInt}
+            ),
+                  prtype, m, n,
+                  A, max(1,stride(A,2)), B, max(1,stride(B,2)),
+                  C, max(1,stride(C,2)), D, max(1,stride(D,2)),
+                  E, max(1,stride(E,2)), F, max(1,stride(F,2)),
+                  R, max(1,stride(R,2)), L, max(1,stride(L,2)),
+                  alpha, qblocka, qblockb
+            )
         end
     end
 end
