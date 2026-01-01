@@ -454,16 +454,7 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
     n = size(HH, 1)
     ulp = eps(real(eltype(HH)))
 
-    @mydebug Hsave = Z*HH*Z'
-    @mydebug function dcheck(str)
-        de = norm(Hsave - Z*HH*Z')
-        if de > 1e-6
-            println()
-            @warn "$str decomp err $de"
-        else
-            print(str," decomp err ", de)
-        end
-    end
+    @mydebug dcheck = DebugCompare(Z*HH*Z', "decomp error")
 
     # key:
     # istart => L
@@ -566,7 +557,7 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
                 end
             end
         end
-        @mydebug dcheck(" QR k=$k")
+        @mydebug dcheck(Z*HH*Z', " QR k=$k")
     end
     # ensure reality of tail
     @inbounds begin
@@ -584,7 +575,7 @@ function singleShiftQR!(HH::StridedMatrix{T}, Z, shift::Number, istart::Integer,
         end
       end
     end
-#    @mydebug dcheck(" QR post")
+#    @mydebug dcheck(Z*HH*Z', " QR post")
     @mydebug println()
     return HH
 end
@@ -914,10 +905,8 @@ end
 function doubleShiftQR!(H::StridedMatrix{T}, Z, shift1, shift2,
                         istart::Integer, iend::Integer, v) where {T <: Real}
     n = size(H,1)
-    @mydebug Hsave = Z*H*Z'
-    @mydebug function dcheck(str)
-        print(str," decomp err ", norm(Hsave - Z*H*Z'))
-    end
+    @mydebug dcheck = DebugCompare(Z*H*Z', "decomp error")
+
     i1 = 1
     i2 = n
     r1r, r1i = reim(shift1)
@@ -1018,7 +1007,7 @@ function doubleShiftQR!(H::StridedMatrix{T}, Z, shift1, shift2,
                 end
             end
         end
-        @mydebug dcheck(" QR k=$k ")
+        @mydebug dcheck(Z*H*Z', " QR k=$k ")
     end # k loop
     @mydebug println()
 end
