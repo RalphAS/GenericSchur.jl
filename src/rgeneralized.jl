@@ -5,10 +5,6 @@
 
 # decomposition is A = Q S Z', B = Q T Z'
 
-function schur!(A::StridedMatrix{T}, B::StridedMatrix{T}; kwargs...) where {T<:Real}
-    ggschur!(A, B; kwargs...)
-end
-
 # similar to LAPACK dgges.
 # TODO: consolidate w/ complex version if possible.
 function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};

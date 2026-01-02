@@ -1,21 +1,25 @@
 module GenericSchur
-using LinearAlgebra
-
-# This is the main public interface of the package.
-# We extend these functions without further note.
-import LinearAlgebra: schur!, eigvals!, eigvecs, eigen!
-
-# Wrappers like `schur` and `eigvals` should just work.
-
-# Some other stdlib functions (e.g., lmul!) are extended, but either non-piratically
-# or with explicit qualification.
 
 # These are introduced here.
 export triangularize, eigvalscond, subspacesep, balance!
 
+VERSION >= v"1.11.0-DEV.469" && eval(Meta.parse(
+    """
+    public
+    gschur!,
+    ggschur!,
+    geigen!,
+    geigvals!,
+    gordschur!,
+    UnconvergedException,
+    IllConditionException,
+    Balancer
+    """))
+
 const STypes = Union{AbstractFloat, Complex{T} where T<:AbstractFloat}
 
-using LinearAlgebra: eigsortby, sorteig!, checksquare
+using LinearAlgebra
+using LinearAlgebra: eigsortby, sorteig!, checksquare, givensAlgorithm, _ordschur!
 using LinearAlgebra: RealHermSymComplexHerm, Algorithm, QRIteration, Givens
 using Printf
 
@@ -46,10 +50,21 @@ struct IllConditionException <: Exception
 end
 
 # Pirated methods
+# This is the main public interface of the package.
+# Non-mutating Wrappers like `schur` and `eigvals` should just work.
 
-schur!(A::StridedMatrix{T}; kwargs...) where {T <: STypes} = gschur!(A; kwargs...)
+# Some other stdlib functions (e.g., lmul!) are extended, but either non-piratically
+# or with explicit qualification.
 
-function eigvals!(A::StridedMatrix{T};
+function LinearAlgebra.schur!(A::StridedMatrix{T}; kwargs...) where {T <: STypes}
+    gschur!(A; kwargs...)
+end
+function LinearAlgebra.schur!(A::StridedMatrix{T}, B::StridedMatrix{T}; kwargs...
+) where {T <: STypes}
+    ggschur!(A, B; kwargs...)
+end
+
+function LinearAlgebra.eigvals!(A::StridedMatrix{T};
                   sortby::Union{Function,Nothing}=eigsortby, kwargs...
                   ) where {T <: STypes}
     S = gschur!(A; wantZ=false, kwargs...)
@@ -69,7 +84,8 @@ Eigenvectors are returned as columns of a matrix, ordered to match `S.values`.
 The returned eigenvectors have unit Euclidean norm, and the largest
 elements are real.
 """
-function eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFloat}
+function LinearAlgebra.eigvecs(S::Schur{Complex{T}}; left::Bool=false
+) where {T <: AbstractFloat}
     if left
         v = _gleigvecs!(S.T,S.Z)
     else
@@ -79,7 +95,7 @@ function eigvecs(S::Schur{Complex{T}}; left::Bool=false) where {T <: AbstractFlo
     v
 end
 
-function eigvecs(S::GeneralizedSchur{T}; left::Bool=false) where {T <: STypes}
+function LinearAlgebra.eigvecs(S::GeneralizedSchur{T}; left::Bool=false) where {T <: STypes}
     if left
         v = _gleigvecs(S.S, S.T, S.Q)
     else
@@ -90,9 +106,9 @@ function eigvecs(S::GeneralizedSchur{T}; left::Bool=false) where {T <: STypes}
     return v
 end
 
-function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
-                sortby::Union{Function,Nothing}=eigsortby, kwargs...
-                ) where {T <: STypes}
+function LinearAlgebra.eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
+                              sortby::Union{Function,Nothing}=eigsortby, kwargs...
+) where {T <: STypes}
     n = checksquare(A)
     if permute || scale
         A, B = balance!(A, scale=scale, permute=permute)
@@ -188,25 +204,25 @@ function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true,
     end
 end
 
-function eigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix};
+function LinearAlgebra.eigen!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix};
                               alg::Algorithm = QRIteration(),
                               kwargs...)
     geigen!(A, alg; kwargs...)
 end
 
-function eigvals!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix};
+function LinearAlgebra.eigvals!(A::RealHermSymComplexHerm{<:STypes, <:StridedMatrix};
                                 alg::Algorithm = QRIteration(),
                                 kwargs...)
     geigvals!(A, alg; kwargs...)
 end
 
-function eigen!(A::SymTridiagonal{<:AbstractFloat};
+function LinearAlgebra.eigen!(A::SymTridiagonal{<:AbstractFloat};
                               alg::Algorithm = QRIteration(),
                               kwargs...)
     geigen!(A, alg; kwargs...)
 end
 
-function eigvals!(A::SymTridiagonal{<:AbstractFloat};
+function LinearAlgebra.eigvals!(A::SymTridiagonal{<:AbstractFloat};
                               alg::Algorithm = QRIteration(),
                               kwargs...)
     geigvals!(A, alg; kwargs...)
@@ -214,6 +230,36 @@ end
 
 # Some variants should be defined here for logical coherence, but not until
 # we've registered nontrivial implementations.
+
+# stdlib only provides not-in-place wrappers for Ty <: BlasFloat
+# We are only claiming extension to STypes here
+function LinearAlgebra._ordschur(T::StridedMatrix{Ty},
+                    Z::StridedMatrix{Ty},
+                                 select::Union{Vector{Bool},BitVector}
+) where {Ty <: STypes}
+    _ordschur!(copy(T), copy(Z), select)
+end
+
+function LinearAlgebra._ordschur(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+                                 Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
+                                 select::Union{Vector{Bool},BitVector}
+) where {Ty <: STypes}
+    _ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
+end
+
+function LinearAlgebra._ordschur!(T::StridedMatrix{Ty},
+                                  Z::StridedMatrix{Ty},
+                                  select::Union{Vector{Bool},BitVector}
+) where {Ty <: STypes}
+                                  gordschur!(T, Z, select)
+end
+
+function LinearAlgebra._ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
+                    Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
+                    select::Union{Vector{Bool},BitVector}
+) where {Ty <: STypes}
+    gordschur!(S, T, Q, Z, select)
+end
 
 ############################################################################
 # Internal implementations follow

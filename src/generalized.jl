@@ -2,19 +2,11 @@
 # Portions derived from LAPACK, see below.
 
 # Schur decomposition (QZ algorithm) for generalized eigen-problems
+# decomposition is A = Q S Z', B = Q T Z'
 
 # Developer notes:
 # We don't currently implement GeneralizedHessenberg types so anyone else
 # using internal functions is doomed to confusion.
-
-using LinearAlgebra: givensAlgorithm
-
-# decomposition is A = Q S Z', B = Q  Tmat Z'
-
-function schur!(A::StridedMatrix{Complex{T}}, B::StridedMatrix{Complex{T}}; kwargs...
-                ) where {T<:AbstractFloat}
-    ggschur!(A, B; kwargs...)
-end
 
 # ggschur! is similar to LAPACK zgges:
 # Q is Vsl, Z is Vsr

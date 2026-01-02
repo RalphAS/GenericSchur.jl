@@ -1,38 +1,6 @@
 # This file is part of GenericSchur.jl, released under the MIT "Expat" license
 # Portions derived from LAPACK, see below.
 
-import LinearAlgebra: _ordschur!, _ordschur
-
-# stdlib only provides not-in-place wrappers for Ty <: BlasFloat
-# We are only claiming extension to STypes here
-function LinearAlgebra._ordschur(T::StridedMatrix{Ty},
-                    Z::StridedMatrix{Ty},
-                                 select::Union{Vector{Bool},BitVector}
-) where {Ty <: STypes}
-    _ordschur!(copy(T), copy(Z), select)
-end
-
-function LinearAlgebra._ordschur(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
-                                 Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
-                                 select::Union{Vector{Bool},BitVector}
-) where {Ty <: STypes}
-    _ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
-end
-
-function LinearAlgebra._ordschur!(T::StridedMatrix{Ty},
-                                  Z::StridedMatrix{Ty},
-                                  select::Union{Vector{Bool},BitVector}
-) where {Ty <: STypes}
-                                  gordschur!(T, Z, select)
-end
-
-function LinearAlgebra._ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
-                    Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
-                    select::Union{Vector{Bool},BitVector}
-) where {Ty <: STypes}
-    gordschur!(S, T, Q, Z, select)
-end
-
 function gordschur!(F::Schur, select::Union{Vector{Bool},BitVector})
     T,Z,λ = gordschur!(F.T, F.Z, select)
     Schur(T,Z,λ)
