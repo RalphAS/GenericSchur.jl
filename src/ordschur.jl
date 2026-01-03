@@ -130,9 +130,17 @@ end
 
 function gordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
                     Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
-                    select::Union{Vector{Bool},BitVector}
+                    select::Union{Vector{Bool},BitVector};
+                    scale::Bool=true
                     ) where {Ty <: Complex}
     n = size(S,1)
+    if scale
+        scaleA, cscale, anrm = _scale!(S)
+        scaleB, cscaleb, bnrm = _scale!(T)
+    else
+        scaleA = false
+        scaleB = false
+    end
     ks = 0
     for k=1:n
         if select[k]
@@ -141,6 +149,12 @@ function gordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty},
                 _trexchange!(S,T,Q,Z,k,ks)
             end
         end
+    end
+    if scaleA
+        safescale!(S, cscale, anrm)
+    end
+    if scaleB
+        safescale!(T, cscaleb, bnrm)
     end
     triu!(S)
     triu!(T)
@@ -156,12 +170,13 @@ transformations.
 function _trexchange!(A::AbstractMatrix{Ty}, B, Q, Z, iold, inew) where {Ty <: Complex}
     if iold < inew
         icur = iold
-        while icur < ilast
+        while icur < inew
             _trexch2!(A,B,Q,Z,icur)
             icur += 1
         end
         icur -= 1
     else
+        @mydebug println("reverse swap $iold with $inew")
         icur =  iold-1
         while icur >= inew
             _trexch2!(A,B,Q,Z,icur)
@@ -179,7 +194,7 @@ swap adjacent 1x1 blocks in UT pair (A,B) via unitary equivalence transform
 apply same transform to associated Q,Z
 """
 function _trexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1;
-                   require_strong=false, throws=true
+                   require_strong=true, throws=true
 ) where {Ty <: STypes}
     # based on ztgex2
     # copy the block to try the swap
@@ -198,30 +213,41 @@ function _trexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1;
     g = S[2,2] * T[1,2] - T[2,2] * S[1,2]
     sa = abs(S[2,2]) * abs(T[1,1])
     sb = abs(S[1,1]) * abs(T[2,2])
-    cz, sz, _ = givensAlgorithm(g,f)
+    if f == 0 && g == 0
+        cz, sz = zero(Ty), one(Ty)
+    else
+        cz, sz, _ = givensAlgorithm(g,f)
+    end
     Gz1 = Givens(1,2,Ty(cz),-sz)
     rmul!(S,adjoint(Gz1))
     rmul!(T,adjoint(Gz1))
     if sa >= sb
-        cq, sq, _ = givensAlgorithm(S[1,1],S[2,1])
+        fq, gq = S[1,1], S[2,1]
     else
-        cq, sq, _ = givensAlgorithm(T[1,1],T[2,1])
+        fq, gq = T[1,1], T[2,1]
+    end
+    if sz != 0 && fq == 0 && gq == 0
+        # patch for continuity (edge case, not handled thus in LAPACK)
+        # CHECKME: the condition may not be optimal
+        cq, sq = zero(Ty), one(Ty)
+    else
+        cq, sq, _ = givensAlgorithm(fq, gq)
     end
     Gq1 = Givens(1,2,Ty(cq),sq)
     lmul!(Gq1,S)
     lmul!(Gq1,T)
     # weak stability test: subdiags <= O( ϵ norm((S,T),"F"))
     ws = abs(S[2,1]) + abs(T[2,1])
+    @mydebug println("  weak test: subdiag norm = $ws")
     weak_ok = ws <= thresh
 
     if !weak_ok
+        @mydebug println("  failed weak stability test")
         throws && throw(IllConditionException(j1))
         return false
     end
 
     if require_strong
-        # FIXME: not yet checked, needs example
-
         # Strong stability test
         # Supposedly equiv. to
         # |[A-Qᴴ*S*Z, B-Qᴴ*T*Z]| <= O(1) ϵ |[A,B]| in F-norm
@@ -237,8 +263,10 @@ function _trexch2!(A::AbstractMatrix{Ty},B,Q,Z,j1;
         Ts .-= B[j1:j1+1,j1:j1+1]
         W = hcat(Ss,Ts)
         ss = _safe_fnorm(vec(W))
+        @mydebug println("  strong test resid=$ss [thresh=$thresh]")
         strong_ok = ss <= thresh
         if !strong_ok
+            @mydebug println("  failed strong stability test")
             throws && throw(IllConditionException(j1))
             return false
         end
