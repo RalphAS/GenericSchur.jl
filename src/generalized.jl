@@ -10,13 +10,13 @@
 
 # ggschur! is similar to LAPACK zgges:
 # Q is Vsl, Z is Vsr
-# Tmat overwrites B
+# T overwrites B
 # S overwrites A
 
-function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};
+function ggschur!(A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
                   wantQ::Bool=true, wantZ::Bool=true,
                   scale::Bool=true,
-                  kwargs...) where T <: Complex
+                  kwargs...) where Ty <: Complex
 
     n = checksquare(A)
     nb = checksquare(B)
@@ -42,17 +42,17 @@ function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};
     if wantQ
         Q = Matrix(bqr.Q)
     else
-        Q = Matrix{T}(undef, 0, 0)
+        Q = Matrix{Ty}(undef, 0, 0)
     end
     if wantZ
-        Z = Matrix{T}(I, n, n)
+        Z = Matrix{Ty}(I, n, n)
     else
-        Z =  Matrix{T}(undef, 0, 0)
+        Z =  Matrix{Ty}(undef, 0, 0)
     end
 
     # materializing R may waste memory; can we rely on storage in modified B?
     A, B, Q, Z = _hessenberg!(A, bqr.R, Q, Z)
-    α, β, S, Tmat, Q, Z = _gqz!(A, B, Q, Z, true; kwargs...)
+    α, β, S, T, Q, Z = _gqz!(A, B, Q, Z, true; kwargs...)
 
     # TODO if balancing, unbalance Q, Z
 
@@ -62,12 +62,12 @@ function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};
         α = diag(S)
     end
     if scaleB
-        safescale!(Tmat, cscaleb, bnrm)
+        safescale!(T, cscaleb, bnrm)
         # checkme: is this always correct?
-        β = diag(Tmat)
+        β = diag(T)
     end
 
-    return GeneralizedSchur(S, Tmat, α, β, Q, Z)
+    return GeneralizedSchur(S, T, α, β, Q, Z)
 end
 
 # B temporarily loses triangularity, so is not specially typed.

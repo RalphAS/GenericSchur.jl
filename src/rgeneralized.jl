@@ -7,10 +7,10 @@
 
 # similar to LAPACK dgges.
 # TODO: consolidate w/ complex version if possible.
-function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};
+function ggschur!(A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
                   wantQ::Bool=true, wantZ::Bool=true,
                   scale::Bool=true,
-                  kwargs...) where T <: Real
+                  kwargs...) where Ty <: Real
 
     n = checksquare(A)
     nb = checksquare(B)
@@ -33,17 +33,17 @@ function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};
     if wantQ
         Q = Matrix(bqr.Q)
     else
-        Q = Matrix{T}(undef, 0, 0)
+        Q = Matrix{Ty}(undef, 0, 0)
     end
     if wantZ
-        Z = Matrix{T}(I, n, n)
+        Z = Matrix{Ty}(I, n, n)
     else
-        Z =  Matrix{T}(undef, 0, 0)
+        Z =  Matrix{Ty}(undef, 0, 0)
     end
 
     # materializing R may waste memory; can we rely on storage in modified B?
     A, B, Q, Z = _hessenberg!(A, bqr.R, Q, Z)
-    α, β, S, Tmat, Q, Z = _gqz!(A, B, Q, Z, true)
+    α, β, S, T, Q, Z = _gqz!(A, B, Q, Z, true)
 
     # TODO if balancing, unbalance Q, Z
 
@@ -52,11 +52,11 @@ function ggschur!(A::StridedMatrix{T}, B::StridedMatrix{T};
         safescale!(α, cscale, anrm)
     end
     if scaleB
-        safescale!(Tmat, cscaleb, bnrm)
+        safescale!(T, cscaleb, bnrm)
         safescale!(β, cscaleb, bnrm)
     end
 
-    return GeneralizedSchur(S, Tmat, α, β, Q, Z)
+    return GeneralizedSchur(S, T, α, β, Q, Z)
 end
 
 const _RG2X2_SAFETY = 100
