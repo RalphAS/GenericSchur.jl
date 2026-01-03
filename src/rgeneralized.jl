@@ -63,7 +63,6 @@ const _RG2X2_SAFETY = 100
 
 # translated from dhgeqz (LAPACK)
 function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
-               debug = false,
                ilo=1, ihi=size(H,1), maxiter=100*(ihi-ilo+1)
                ) where {T <: Real}
     n = checksquare(H)
@@ -83,7 +82,6 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     btol = max(safmin, ulp * bnorm)
     ascale = one(T) / max(safmin, anorm)
     bscale = one(T) / max(safmin, bnorm)
-    half = 1 / T(2)
 
     # set trivial trailing eigvals
     for j in ihi+1:n
@@ -124,24 +122,21 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         # 1: H[j,j-1] == 0 || j=ilo
         # 2: B[j,j] = 0
 
-        trivsplit = false
+        br = _deflatec_unknown
         if ilast == ilo
-            trivsplit = true
-        elseif (abs(H[ilast,ilast-1]) <
-            max(safmin, ulp * (abs(H[ilast,ilast]) + abs(H[ilast-1,ilast-1]))))
+            br = _deflatec_normal
+        elseif (abs(H[ilast,ilast-1]) < max(safmin,
+                                            ulp * (abs(H[ilast,ilast])
+                                                   + abs(H[ilast-1,ilast-1]))))
             H[ilast, ilast-1] = 0
-            trivsplit = true
-        end
-        if trivsplit
+            br = _deflatec_normal
             @mydebug println("trivial split at $ilast")
         end
-        # For now, we follow LAPACK too closely.
-        # br is a branch indicator corresponding to goto targets
-        br = trivsplit ? :br_deflate_ilast : :br_none
-        if !trivsplit
+
+        if br == _deflatec_unknown
             if abs(B[ilast,ilast]) <= btol
                 B[ilast,ilast] = 0
-                br = :br_B_ilast_sing
+                br = _deflatec_inf
                 @mydebug println("split on singular entry in B at $ilast")
             else
                 # general case
@@ -193,18 +188,20 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                                 have2_H_0sd = false
                                 if abs(B[jch+1, jch+1]) > btol
                                     if jch+1 >= ilast
-                                        br = :br_deflate_ilast
+                                        br = _deflatec_normal
                                         break
                                     else
                                         ifirst = jch+1
-                                        br = :br_QZ
+                                        br = _deflatec_none
                                         break
                                     end
                                 end
                                 @mydebug println("  another at $(jch+1)")
                                 B[jch+1, jch+1] = 0
                             end # jch loop
-                            br = :br_B_ilast_sing
+                            if br == _deflatec_unknown
+                                br = _deflatec_inf
+                            end
                             break
                         else
                             # only test 2 passed: chase 0 to B[ilast,ilast]
@@ -232,35 +229,39 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                                     rmul!(Z,G')
                                 end
                             end # jch loop
-                            br = :br_B_ilast_sing
+                            br = _deflatec_inf
                             break
                         end # if have_H_0sd || have2_H_0sd
                     elseif have_H_0sd # not tiny B[j,j]
                         ifirst = j
                         @mydebug (ifirst > ilo) && println("nonsingular split at $ifirst")
-                        br = :br_QZ
+                        br = _deflatec_none
                         break
                     end # if B[j,j] tiny
                     # neither test passed; try next j
                 end # j loop (40)
-                if br == :br_none
+                if br == _deflatec_unknown
                     error("algorithmic failure: splitting drop-through assumed impossible")
                 end
             end # if B[ilast,ilast] tiny
-            if br == :br_B_ilast_sing
+            if br == _deflatec_inf
                 # B[ilast,ilast] = 0; clear H[ilast,ilast-1] to split off 1x1
                 G,r = givens(H[ilast,ilast],H[ilast,ilast-1],ilast,ilast-1)
                 H[ilast,ilast] = r
                 H[ilast,ilast-1] = 0
                 rmul!(view(H,ifirstm:ilast-1,:),G')
                 rmul!(view(B,ifirstm:ilast-1,:),G')
+                # Puzzlement: The last line seems to miss a row, but if we do
+                #   rmul!(view(B,ifirstm:ilast,:),G')
+                # instead, we get consistent B decomp at the cost
+                # of introducing a subdiagonal which is never cleared
                 if wantZ
                     rmul!(Z,G')
                 end
-                br = :br_deflate_ilast
+                br = _deflatec_normal
             end
-        end # if !trivsplit
-        if br == :br_deflate_ilast
+        end # if not a trivial split
+        if br == _deflatec_normal
             # found or made zero subdiag H[ilast, ilast-1]:
             @mydebug println("deflating $ilast")
             # standardize B, set α,β
@@ -294,9 +295,11 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                 end
             end
             continue # iteration loop
-        end # br == :br_deflate_ilast branch
+        end # br == _deflatec_normal branch
 
-        @assert br == :br_QZ
+        @mydebug begin
+            @assert br == _deflatec_none
+        end
 
         # QZ step
         # This iteration involves block ifirst:ilast, assumed nonempty
@@ -352,7 +355,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         wr *= scale
 
         # check for two consecutive small subdiagonals
-        local f1
+        local f1, _istart
         gotit = false
         for j=ilast-1:-1:ifirst+1
             _istart = j
@@ -928,6 +931,7 @@ function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
     ga = abs(gt)
 
     if ga == 0
+        # diagonal matrix
         ssmin = ha
         ssmax = fa
         clt = one(T)
@@ -935,12 +939,12 @@ function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
         slt = zero(T)
         srt = zero(T)
     else
-        gasmall = true
+        ga_small = true
         if ga > fa
             pmax = 2
             if (fa/ga) < eps(one(T))
                 # very large ga
-                gasmall = false
+                ga_small = false
                 ssmax = ga
                 ssmin = (ha > one(T)) ? (fa / (ga/ha)) : ((fa/ha) * ha)
                 clt = one(T)
@@ -949,18 +953,20 @@ function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
                 crt = ft / gt
             end
         end
-        if gasmall
+        if ga_small
             # normal case
             d = fa - ha
             # handle infinite ft or ht
             l = (d == fa) ? one(T) : (d / fa)
             m = gt / ft
             t = 2 - l
+            # note that 0 ≤ l ≤ 1 and abs(m) ≤ 1/ϵ
             mm = m * m
             tt = t * t
             s = sqrt(tt + mm)
             r = (l == 0) ? abs(m) : sqrt(l*l + mm)
             a = (s + r) / 2
+            # note that 1 ≤ s ≤ 1 + 1/ϵ and 0 ≤ r ≤ 1 + 1/ϵ and a ≤ 1 + abs(m)
             ssmin = ha / a
             ssmax = fa * a
             if mm == 0
@@ -968,7 +974,7 @@ function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
                 if l == 0
                     t = copysign(T(2),ft) * copysign(one(T), gt)
                 else
-                    t = gs / copysign(d, ft) + m / t
+                    t = gt / copysign(d, ft) + m / t
                 end
             else
                 t = (m / (s + t) + m / (r + l)) * (one(T) + a)

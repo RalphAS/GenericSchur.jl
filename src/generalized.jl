@@ -102,9 +102,16 @@ function _hessenberg!(A::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z;
     return triu!(A,-1), triu!(B), Q, Z
 end
 
-# single-shift QZ algo
+@enum _DeflateCase begin
+    _deflatec_unknown
+    _deflatec_none # i.e. advance to QZ
+    _deflatec_normal # negligible subdiagonal in H
+    _deflatec_inf # zero in B at ilast, could also be a singularity
+end
+
+# single-shift QZ algorithm
 #
-# translated from LAPACK's zhgeqz
+# translated from LAPACK's zhgeqz (pretty close to Moler & Stewart)
 # LAPACK is released under a BSD license, and is
 # Copyright:
 # Univ. of Tennessee
@@ -122,9 +129,6 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     wantQ = !isempty(Q)
     wantZ = !isempty(Z)
 
-    if ilo > 1 || ihi < n
-        @warn "almost surely not working for nontrivial ilo,ihi"
-    end
     α = Vector{T}(undef, n)
     β = Vector{T}(undef, n)
 
@@ -139,7 +143,11 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     bscale = one(RT) / max(safmin, bnorm)
     half = 1 / RT(2)
 
-    # TODO: if ihi < n, deal with ihi+1:n
+    # set trivial trailing eigvals
+    for j in ihi+1:n
+        α[j] = H[j,j]
+        β[j] = B[j,j]
+    end
 
     ifirst = ilo
     ilast = ihi
@@ -159,34 +167,31 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         if niter > maxiter
             throw(UnconvergedException("iteration limit $maxiter reached"))
         end
+        @mydebug println("iteration $niter ilast=$ilast")
 
         # Split H if possible
         # Use 2 tests:
         # 1: H[j,j-1] == 0 || j=ilo
         # 2: B[j,j] = 0
 
-        null_Btail = false # branch 50 in zhgeqz
-        deflate_H = false  # branch 60 in zhgeqz
-        ns_Bblock_found = false # branch 70 in zhgeqz
+        br = _deflatec_unknown
 
         # specialize for j==ilast
         if ilast == ilo
-            deflate_H = true
+            br = _deflatec_normal
         elseif abs1(H[ilast,ilast-1]) < max(safmin,
                                             ulp * (abs1(H[ilast, ilast])
                                                    + abs1(H[ilast-1,ilast-1])))
             H[ilast, ilast-1] = 0
-            deflate_H = true
+            br = _deflatec_normal
+            @mydebug println("trivial split at $ilast")
         end
         # For now, we follow LAPACK quite closely.
-        # br is a branch indicator corresponding to goto targets
-        br = deflate_H ? :br60 : :br_none
-        if !deflate_H
-            # deflate_H is only tentatively false at this point
+        if br == _deflatec_unknown
             if abs(B[ilast,ilast]) <= btol
                 B[ilast,ilast] = 0
-                null_Btail = true
-                br = :br50
+                br = _deflatec_inf
+                @mydebug println("split on singular entry in B at $ilast")
             else
                 # general case
                 for j=ilast-1:-1:ilo
@@ -213,7 +218,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                         # if both tests pass, split 1x1 block off top
                         # if remaining leading diagonal elt vanishes, iterate
                         if split_test1 || split_test1a
-                            @mydebug println("splitting 1x1 at top (j=$j)")
+                            @mydebug println("splitting 1x1 at top (j=$j), singular B")
                             for jch=j:ilast-1
                                 G,r = givens(H[jch,jch],H[jch+1,jch],jch,jch+1)
                                 H[jch,jch] = r
@@ -229,21 +234,18 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                                 split_test1a = false
                                 if abs1(B[jch+1, jch+1]) > btol
                                     if jch+1 >= ilast
-                                        deflate_H = true
-                                        br = :br60
+                                        br = _deflatec_normal
                                         break
                                     else
                                         ifirst = jch+1
-                                        ns_Bblock_found = true
-                                        br = :br70
+                                        br = _deflatec_none
                                         break
                                     end
                                 end
                                 B[jch+1, jch+1] = 0
                             end # jch loop
-                            if !ns_Bblock_found && !deflate_H
-                                null_Btail = true
-                                br = :br50
+                            if br == _deflatec_unknown
+                                br = _deflatec_inf
                             end
                             break
                         else
@@ -272,23 +274,22 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                                     rmul!(Z,G')
                                 end
                             end # jch loop
-                            null_Btail = true
-                            br = :br50
+                            br = _deflatec_inf
+                            break
                         end # if split_test1 || split_test1a
-                    elseif split_test1 # but not split_test2, i.e. tiny B[j,j]
+                    elseif split_test1 # but not split_test2, i.e. B[j,j] is not tiny
                         ifirst = j
-                        ns_Bblock_found = true
-                        br = :br70
+                        @mydebug (ifirst > ilo) && println("nonsingular split at $ifirst")
+                        br = _deflatec_none
                         break
                     end # if B[j,j] tiny
                     # neither test passed; try next j
                 end # j loop
-                @mydebug println("after j loop branch $br")
-                if br == :br_none
+                if br == _deflatec_unknown
                     error("dev error: drop-through assumed impossible")
                 end
             end # B[ilast,ilast] is/is-not tiny branches
-            if null_Btail # br == :br50
+            if br == _deflatec_inf
                 # B[ilast,ilast] is 0; clear H[ilast,ilast-1] to split
                 G,r = givens(conj(H[ilast,ilast]),conj(H[ilast,ilast-1]),ilast,ilast-1)
                 H[ilast,ilast] = r'
@@ -298,14 +299,13 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                 if wantZ
                     rmul!(Z,G')
                 end
-                deflate_H = true
-                br = :br60
+                br = _deflatec_normal
             end
         end # if trivial split
-        if deflate_H
+        if br == _deflatec_normal
             # H[ilast, ilast-1] == 0: standardize B, set α,β
             absb = abs(B[ilast,ilast])
-            @mydebug println("deflation ilast=$ilast, |B_tail|=$absb")
+            @mydebug println("deflating $ilast, |B_tail|=$absb")
             if absb > safmin
                 signbc = conj(B[ilast,ilast] / absb)
                 B[ilast,ilast] = absb
@@ -337,9 +337,11 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                 end
             end
             continue # iteration loop
-        end # deflation branch
+        end # normal deflation branch
 
-        @assert ns_Bblock_found
+        @mydebug begin
+            @assert br == _deflatec_none
+        end
 
         # QZ step
         # This iteration involves block ifirst:ilast, assumed nonempty
@@ -444,17 +446,22 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         end
     end # iteration loop
     @mydebug println("ggschur! done in $niter iters")
-    # TODO if ilo > 1, deal with 1:ilo-1
+
+    # set eigenvalues for trivial leading part
+    for j in 1:ilo-1
+        α[j] = H[j,j]
+        β[j] = B[j,j]
+    end
 
     return α, β, H, B, Q, Z
 end
 
 """
-    canonicalize!(S::GeneralizedSchur)
+    _canonicalize!(S::GeneralizedSchur)
 
 rescale the fields of `S` so that `S.β` and the diagonal of `S.T` are real.
 """
-function canonicalize!(S::GeneralizedSchur{Ty}) where Ty
+function _canonicalize!(S::GeneralizedSchur{Ty}) where Ty
     n = size(S.S,1)
     sf = safemin(real(Ty))
     for k=1:n
