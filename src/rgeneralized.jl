@@ -7,10 +7,12 @@
 
 # similar to LAPACK dgges.
 # TODO: consolidate w/ complex version if possible.
-function ggschur!(A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
-                  wantQ::Bool=true, wantZ::Bool=true,
-                  scale::Bool=true,
-                  kwargs...) where Ty <: Real
+function ggschur!(
+        A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
+        wantQ::Bool = true, wantZ::Bool = true,
+        scale::Bool = true,
+        kwargs...
+    ) where {Ty <: Real}
 
     n = checksquare(A)
     nb = checksquare(B)
@@ -38,7 +40,7 @@ function ggschur!(A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
     if wantZ
         Z = Matrix{Ty}(I, n, n)
     else
-        Z =  Matrix{Ty}(undef, 0, 0)
+        Z = Matrix{Ty}(undef, 0, 0)
     end
 
     # materializing R may waste memory; can we rely on storage in modified B?
@@ -62,9 +64,10 @@ end
 const _RG2X2_SAFETY = 100
 
 # translated from dhgeqz (LAPACK)
-function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
-               ilo=1, ihi=size(H,1), maxiter=100*(ihi-ilo+1)
-               ) where {T <: Real}
+function _gqz!(
+        H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
+        ilo = 1, ihi = size(H, 1), maxiter = 100 * (ihi - ilo + 1)
+    ) where {T <: Real}
     n = checksquare(H)
     wantQ = !isempty(Q)
     wantZ = !isempty(Z)
@@ -76,45 +79,45 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     safmin = safemin(T)
     safmax = one(T) / safmin
     safety = T(_RG2X2_SAFETY)
-    anorm = norm(view(H,ilo:ihi,ilo:ihi),2) # Frobenius
-    bnorm = norm(view(B,ilo:ihi,ilo:ihi),2) # Frobenius
+    anorm = norm(view(H, ilo:ihi, ilo:ihi), 2) # Frobenius
+    bnorm = norm(view(B, ilo:ihi, ilo:ihi), 2) # Frobenius
     atol = max(safmin, ulp * anorm)
     btol = max(safmin, ulp * bnorm)
     ascale = one(T) / max(safmin, anorm)
     bscale = one(T) / max(safmin, bnorm)
 
     # set trivial trailing eigvals
-    for j in ihi+1:n
-        if B[j,j] < 0
+    for j in (ihi + 1):n
+        if B[j, j] < 0
             if wantSchur
-                H[1:j,j] .= -H[1:j,j]
-                B[1:j,j] .= -B[1:j,j]
+                H[1:j, j] .= -H[1:j, j]
+                B[1:j, j] .= -B[1:j, j]
             else
-                H[j,j] = -H[j,j]
-                B[j,j] = -B[j,j]
+                H[j, j] = -H[j, j]
+                B[j, j] = -B[j, j]
             end
             if wantZ
-                Z[1:n,j] .= -Z[1:n,j]
+                Z[1:n, j] .= -Z[1:n, j]
             end
         end
-        α[j] = H[j,j]
-        β[j] = B[j,j]
+        α[j] = H[j, j]
+        β[j] = B[j, j]
     end
 
     ifirst = ilo
     ilast = ihi
 
     if wantSchur
-        ifirstm, ilastm = 1,n
+        ifirstm, ilastm = 1, n
     else
-        ifirstm, ilastm = ilo,ihi
+        ifirstm, ilastm = ilo, ihi
     end
 
     shiftcount = 0
     eshift = zero(T)
-    v = zeros(T,3) # used for reflectors below
+    v = zeros(T, 3) # used for reflectors below
 
-    for it=1:maxiter
+    for it in 1:maxiter
         @mydebug println("iteration $it ilast=$ilast")
 
         # Split H if possible
@@ -125,79 +128,87 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         br = _deflatec_unknown
         if ilast == ilo
             br = _deflatec_normal
-        elseif (abs(H[ilast,ilast-1]) < max(safmin,
-                                            ulp * (abs(H[ilast,ilast])
-                                                   + abs(H[ilast-1,ilast-1]))))
-            H[ilast, ilast-1] = 0
+        elseif (
+                abs(H[ilast, ilast - 1]) < max(
+                    safmin,
+                    ulp * (
+                        abs(H[ilast, ilast])
+                            + abs(H[ilast - 1, ilast - 1])
+                    )
+                )
+            )
+            H[ilast, ilast - 1] = 0
             br = _deflatec_normal
             @mydebug println("trivial split at $ilast")
         end
 
         if br == _deflatec_unknown
-            if abs(B[ilast,ilast]) <= btol
-                B[ilast,ilast] = 0
+            if abs(B[ilast, ilast]) <= btol
+                B[ilast, ilast] = 0
                 br = _deflatec_inf
                 @mydebug println("split on singular entry in B at $ilast")
             else
                 # general case
-                for j=ilast-1:-1:ilo
+                for j in (ilast - 1):-1:ilo
                     # Test 1
                     have_H_0sd = false
-                    if j==ilo
+                    if j == ilo
                         have_H_0sd = true
                     else
-                        if abs(H[j,j-1]) <= atol
-                            H[j,j-1] = 0
+                        if abs(H[j, j - 1]) <= atol
+                            H[j, j - 1] = 0
                             have_H_0sd = true
                         end
                     end
                     # Test 2
-                    if abs(B[j,j]) < btol
-                        B[j,j] = 0
+                    if abs(B[j, j]) < btol
+                        B[j, j] = 0
                         # Test 1a: check for 2 consec. small subdiags in H
                         have2_H_0sd = false
                         if !have_H_0sd
-                            t = abs(H[j,j-1])
-                            t2 = abs(H[j,j])
-                            tr = max(t,t2)
+                            t = abs(H[j, j - 1])
+                            t2 = abs(H[j, j])
+                            tr = max(t, t2)
                             if tr < 1 && tr != 0
                                 t = t / tr
                                 t2 = t2 / tr
                             end
-                            have2_H_0sd = (t * (ascale * abs(H[j+1,j]))
-                                      <= t2 * (ascale * atol))
+                            have2_H_0sd = (
+                                t * (ascale * abs(H[j + 1, j]))
+                                    <= t2 * (ascale * atol)
+                            )
                         end
                         # if both tests pass, split 1x1 block off top
                         # if remaining leading diagonal elt vanishes, iterate
                         if have_H_0sd || have2_H_0sd
                             @mydebug println("split on singular entry in B at $j")
-                            for jch=j:ilast-1
+                            for jch in j:(ilast - 1)
                                 # G,r = givens(H[jch,jch],H[jch+1,jch],jch,jch+1)
-                                c,s,r = givensAlgorithm(H[jch,jch],H[jch+1,jch])
-                                G = Givens(jch,jch+1,c,s)
-                                H[jch,jch] = r
-                                H[jch+1,jch] = 0
-                                lmul!(G,view(H,:,jch+1:ilastm))
-                                lmul!(G,view(B,:,jch+1:ilastm))
+                                c, s, r = givensAlgorithm(H[jch, jch], H[jch + 1, jch])
+                                G = Givens(jch, jch + 1, c, s)
+                                H[jch, jch] = r
+                                H[jch + 1, jch] = 0
+                                lmul!(G, view(H, :, (jch + 1):ilastm))
+                                lmul!(G, view(B, :, (jch + 1):ilastm))
                                 if wantQ
                                     rmul!(Q, G')
                                 end
                                 if have2_H_0sd
-                                    H[jch,jch-1] *= c
+                                    H[jch, jch - 1] *= c
                                 end
                                 have2_H_0sd = false
-                                if abs(B[jch+1, jch+1]) > btol
-                                    if jch+1 >= ilast
+                                if abs(B[jch + 1, jch + 1]) > btol
+                                    if jch + 1 >= ilast
                                         br = _deflatec_normal
                                         break
                                     else
-                                        ifirst = jch+1
+                                        ifirst = jch + 1
                                         br = _deflatec_none
                                         break
                                     end
                                 end
-                                @mydebug println("  another at $(jch+1)")
-                                B[jch+1, jch+1] = 0
+                                @mydebug println("  another at $(jch + 1)")
+                                B[jch + 1, jch + 1] = 0
                             end # jch loop
                             if br == _deflatec_unknown
                                 br = _deflatec_inf
@@ -207,26 +218,30 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                             # only test 2 passed: chase 0 to B[ilast,ilast]
                             # then process as above
                             @mydebug println("chase singular entry in B at $j")
-                            for jch=j:ilast-1
-                                G,r = givens(B[jch,jch+1],B[jch+1,jch+1],
-                                             jch,jch+1)
-                                B[jch,jch+1] = r
-                                B[jch+1,jch+1] = 0
-                                if jch < ilastm-1
-                                    lmul!(G,view(B,:,jch+2:ilastm))
+                            for jch in j:(ilast - 1)
+                                G, r = givens(
+                                    B[jch, jch + 1], B[jch + 1, jch + 1],
+                                    jch, jch + 1
+                                )
+                                B[jch, jch + 1] = r
+                                B[jch + 1, jch + 1] = 0
+                                if jch < ilastm - 1
+                                    lmul!(G, view(B, :, (jch + 2):ilastm))
                                 end
-                                lmul!(G,view(H,:,jch-1:ilastm))
+                                lmul!(G, view(H, :, (jch - 1):ilastm))
                                 if wantQ
-                                    rmul!(Q,G')
+                                    rmul!(Q, G')
                                 end
-                                G,r = givens(H[jch+1,jch],H[jch+1,jch-1],
-                                            jch,jch-1)
-                                H[jch+1,jch] = r
-                                H[jch+1,jch-1] = 0
-                                rmul!(view(H,ifirstm:jch,:),G')
-                                rmul!(view(B,ifirstm:jch-1,:),G')
+                                G, r = givens(
+                                    H[jch + 1, jch], H[jch + 1, jch - 1],
+                                    jch, jch - 1
+                                )
+                                H[jch + 1, jch] = r
+                                H[jch + 1, jch - 1] = 0
+                                rmul!(view(H, ifirstm:jch, :), G')
+                                rmul!(view(B, ifirstm:(jch - 1), :), G')
                                 if wantZ
-                                    rmul!(Z,G')
+                                    rmul!(Z, G')
                                 end
                             end # jch loop
                             br = _deflatec_inf
@@ -246,17 +261,17 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
             end # if B[ilast,ilast] tiny
             if br == _deflatec_inf
                 # B[ilast,ilast] = 0; clear H[ilast,ilast-1] to split off 1x1
-                G,r = givens(H[ilast,ilast],H[ilast,ilast-1],ilast,ilast-1)
-                H[ilast,ilast] = r
-                H[ilast,ilast-1] = 0
-                rmul!(view(H,ifirstm:ilast-1,:),G')
-                rmul!(view(B,ifirstm:ilast-1,:),G')
+                G, r = givens(H[ilast, ilast], H[ilast, ilast - 1], ilast, ilast - 1)
+                H[ilast, ilast] = r
+                H[ilast, ilast - 1] = 0
+                rmul!(view(H, ifirstm:(ilast - 1), :), G')
+                rmul!(view(B, ifirstm:(ilast - 1), :), G')
                 # Puzzlement: The last line seems to miss a row, but if we do
                 #   rmul!(view(B,ifirstm:ilast,:),G')
                 # instead, we get consistent B decomp at the cost
                 # of introducing a subdiagonal which is never cleared
                 if wantZ
-                    rmul!(Z,G')
+                    rmul!(Z, G')
                 end
                 br = _deflatec_normal
             end
@@ -265,7 +280,7 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
             # found or made zero subdiag H[ilast, ilast-1]:
             @mydebug println("deflating $ilast")
             # standardize B, set α,β
-            if B[ilast,ilast] < 0
+            if B[ilast, ilast] < 0
                 if wantSchur
                     H[ifirstm:ilast, ilast] .= -H[ifirstm:ilast, ilast]
                     B[ifirstm:ilast, ilast] .= -B[ifirstm:ilast, ilast]
@@ -274,12 +289,12 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                     B[ilast, ilast] = -B[ilast, ilast]
                 end
                 if wantZ
-                    Z[:, ilast] .= -Z[:,ilast]
+                    Z[:, ilast] .= -Z[:, ilast]
                 end
             end
 
-            α[ilast] = H[ilast,ilast]
-            β[ilast] = B[ilast,ilast]
+            α[ilast] = H[ilast, ilast]
+            β[ilast] = B[ilast, ilast]
 
             # advance to next block or exit if done with core blocks
             ilast -= 1
@@ -312,15 +327,19 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         # At this point ifirst < ilast and diagonal elts of B in that block
         # are all nontrivial.
 
-        if shiftcount % 10 !=  0
+        if shiftcount % 10 != 0
             # Wilkinson shift, i.e. eigenvalue of last 2x2 block of
             # A B⁻¹ nearest to last elt
 
-            s1,s2,wr,wr2,wi = _ggs_2x2(view(H, ilast-1:ilast, ilast-1:ilast),
-                                      view(B, ilast-1:ilast, ilast-1:ilast),
-                                      safmin * safety)
-            if (abs((wr/s1) * B[ilast,ilast] - H[ilast, ilast])
-                > abs((wr2 / s2) * B[ilast, ilast] - H[ilast, ilast]))
+            s1, s2, wr, wr2, wi = _ggs_2x2(
+                view(H, (ilast - 1):ilast, (ilast - 1):ilast),
+                view(B, (ilast - 1):ilast, (ilast - 1):ilast),
+                safmin * safety
+            )
+            if (
+                    abs((wr / s1) * B[ilast, ilast] - H[ilast, ilast])
+                        > abs((wr2 / s2) * B[ilast, ilast] - H[ilast, ilast])
+                )
                 wr, wr2 = wr2, wr
                 s1, s2 = s2, s1
             end
@@ -328,8 +347,8 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         else
             # exceptional shift
             # "Chosen for no particularly good reason" (LAPACK)
-            if maxiter * safmin * abs(H[ilast, ilast-1]) < abs(B[ilast-1,ilast-1])
-                eshift = H[ilast, ilast-1] / B[ilast-1, ilast-1]
+            if maxiter * safmin * abs(H[ilast, ilast - 1]) < abs(B[ilast - 1, ilast - 1])
+                eshift = H[ilast, ilast - 1] / B[ilast - 1, ilast - 1]
             else
                 eshift += 1 / (safmin * maxiter)
             end
@@ -339,408 +358,420 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         end
 
 
-      if wi == 0
-        # real shift; logic (approx) equiv to zhgeqz
-          @mydebug println("QZ $ifirst:$ilast w/ shift $wr"
-              * "(exc)"^(shiftcount % 10 == 0))
+        if wi == 0
+            # real shift; logic (approx) equiv to zhgeqz
+            @mydebug println(
+                "QZ $ifirst:$ilast w/ shift $wr"
+                    * "(exc)"^(shiftcount % 10 == 0)
+            )
 
-        # fiddle with shift to avoid overflow
-        t = min(ascale, one(T)) * (safmax / 2)
-        scale = s1 > t ? t / s1 : one(T)
-        t = min(bscale, one(T)) * (safmax / 2)
-        if abs(wr) > t
-            scale = min(scale, t / abs(wr))
-        end
-        s1 *= scale
-        wr *= scale
-
-        # check for two consecutive small subdiagonals
-        local f1, _istart
-        gotit = false
-        for j=ilast-1:-1:ifirst+1
-            _istart = j
-            t = abs(s1*H[j,j-1])
-            t2 = abs(s1*H[j,j] - wr*B[j,j])
-            tr = max(t,t2)
-            if tr < 1 && tr != 0
-                t /= tr
-                t2 /= tr
+            # fiddle with shift to avoid overflow
+            t = min(ascale, one(T)) * (safmax / 2)
+            scale = s1 > t ? t / s1 : one(T)
+            t = min(bscale, one(T)) * (safmax / 2)
+            if abs(wr) > t
+                scale = min(scale, t / abs(wr))
             end
-            if abs((ascale * H[j+1, j]) * t) <= ascale * atol * t2
-                gotit = true
-                break
+            s1 *= scale
+            wr *= scale
+
+            # check for two consecutive small subdiagonals
+            local f1, _istart
+            gotit = false
+            for j in (ilast - 1):-1:(ifirst + 1)
+                _istart = j
+                t = abs(s1 * H[j, j - 1])
+                t2 = abs(s1 * H[j, j] - wr * B[j, j])
+                tr = max(t, t2)
+                if tr < 1 && tr != 0
+                    t /= tr
+                    t2 /= tr
+                end
+                if abs((ascale * H[j + 1, j]) * t) <= ascale * atol * t2
+                    gotit = true
+                    break
+                end
             end
-        end
-        if !gotit
-            _istart = ifirst
-        end
-
-        # implicit single-shift qz sweep
-        f1 = s1 * H[_istart, _istart] - wr * B[_istart, _istart]
-        g2 = s1 * H[_istart+1, _istart]
-        c,s,t3 = givensAlgorithm(f1, g2)
-        for j=_istart:ilast-1
-            if j > _istart
-                    c,s,r = givensAlgorithm(H[j,j-1], H[j+1,j-1])
-                    H[j,j-1] = r
-                    H[j+1,j-1] = 0
+            if !gotit
+                _istart = ifirst
             end
-            G = Givens(j,j+1,T(c),s)
-            lmul!(G, view(H,:,j:ilastm))
-            lmul!(G, view(B,:,j:ilastm))
-            if wantQ
-                rmul!(Q, G')
+
+            # implicit single-shift qz sweep
+            f1 = s1 * H[_istart, _istart] - wr * B[_istart, _istart]
+            g2 = s1 * H[_istart + 1, _istart]
+            c, s, t3 = givensAlgorithm(f1, g2)
+            for j in _istart:(ilast - 1)
+                if j > _istart
+                    c, s, r = givensAlgorithm(H[j, j - 1], H[j + 1, j - 1])
+                    H[j, j - 1] = r
+                    H[j + 1, j - 1] = 0
+                end
+                G = Givens(j, j + 1, T(c), s)
+                lmul!(G, view(H, :, j:ilastm))
+                lmul!(G, view(B, :, j:ilastm))
+                if wantQ
+                    rmul!(Q, G')
+                end
+                c, s, r = givensAlgorithm(B[j + 1, j + 1], B[j + 1, j])
+                B[j + 1, j + 1] = r
+                B[j + 1, j] = 0
+                G = Givens(j, j + 1, T(c), s)
+                rmul!(view(H, ifirstm:min(j + 2, ilast), :), G)
+                rmul!(view(B, ifirstm:j, :), G)
+                if wantZ
+                    rmul!(Z, G)
+                end
             end
-            c,s,r = givensAlgorithm(B[j+1,j+1], B[j+1,j])
-            B[j+1,j+1] = r
-            B[j+1,j] = 0
-            G = Givens(j,j+1,T(c),s)
-            rmul!(view(H,ifirstm:min(j+2,ilast),:),G)
-            rmul!(view(B,ifirstm:j,:),G)
-            if wantZ
-                rmul!(Z, G)
-            end
-        end
-      else # shift is complex
-          @mydebug println("QZ $ifirst:$ilast w/ shift $wr + $wi im")
-          # Francis double shift
-          # dhgeqz notes that this should work with real shifts if block is at least 3x3,
-          # but might fail in 2x2 case
-          if ilast == ifirst+1
-              # Special case: 2x2 block w/ complex eigenvectors
+        else # shift is complex
+            @mydebug println("QZ $ifirst:$ilast w/ shift $wr + $wi im")
+            # Francis double shift
+            # dhgeqz notes that this should work with real shifts if block is at least 3x3,
+            # but might fail in 2x2 case
+            if ilast == ifirst + 1
+                # Special case: 2x2 block w/ complex eigenvectors
 
-              # step 1: standardize (diagonalize B block)
-              # Note ordering gotcha: fn returns ssmin,ssmax,...
-              # We want largest s.v. in first slot.
-              b22,b11,sr,cr,sl,cl = _gsvd_2x2(view(B,ifirst:ilast,ifirst:ilast))
-              if b11 < 0
-                  cr = -cr
-                  sr = -sr
-                  b11 = -b11
-                  b22 = -b22
-              end
-              Gl = Givens(ifirst,ilast,cl,sl)
-              Gr = Givens(ifirst,ilast,cr,sr)
-              lmul!(Gl, view(H,:,ifirst:ilastm))
-              rmul!(view(H,ifirstm:ilast,:), Gr')
-              if ilast < ilastm
-                  lmul!(Gl, view(B,:,ilast+1:ilastm))
-              end
-              if ifirstm < ifirst
-                  rmul!(view(B,ifirstm:ifirst-1,:), Gr')
-              end
-              # these might conceivably be correct
-              if wantQ
-                  rmul!(Q, Gl')
-              end
-              if wantZ
-                  rmul!(Z, Gr')
-              end
+                # step 1: standardize (diagonalize B block)
+                # Note ordering gotcha: fn returns ssmin,ssmax,...
+                # We want largest s.v. in first slot.
+                b22, b11, sr, cr, sl, cl = _gsvd_2x2(view(B, ifirst:ilast, ifirst:ilast))
+                if b11 < 0
+                    cr = -cr
+                    sr = -sr
+                    b11 = -b11
+                    b22 = -b22
+                end
+                Gl = Givens(ifirst, ilast, cl, sl)
+                Gr = Givens(ifirst, ilast, cr, sr)
+                lmul!(Gl, view(H, :, ifirst:ilastm))
+                rmul!(view(H, ifirstm:ilast, :), Gr')
+                if ilast < ilastm
+                    lmul!(Gl, view(B, :, (ilast + 1):ilastm))
+                end
+                if ifirstm < ifirst
+                    rmul!(view(B, ifirstm:(ifirst - 1), :), Gr')
+                end
+                # these might conceivably be correct
+                if wantQ
+                    rmul!(Q, Gl')
+                end
+                if wantZ
+                    rmul!(Z, Gr')
+                end
 
-              B[ilast-1, ilast-1] = b11
-              B[ilast-1, ilast] = 0
-              B[ilast, ilast-1] = 0
-              B[ilast, ilast] = b22
-              if b22 < 0
-                  H[ifirstm:ilast, ilast] .= - H[ifirstm:ilast, ilast]
-                  B[ifirstm:ilast, ilast] .= - B[ifirstm:ilast, ilast]
-                  if wantZ
-                      Z[1:n, ilast] .= -Z[1:n,ilast]
-                  end
-                  b22 = - b22
-              end
-              # step 2: compute α, β
-              s1, _, wr, _, wi = _ggs_2x2(view(H,ilast-1:ilast, ilast-1:ilast),
-                                         view(B,ilast-1:ilast, ilast-1:ilast),
-                                         safmin * safety)
-              if wi == 0 # perturbation put shift back on real line
-                  @mydebug println("backtracking to real shift")
-                  @mydebug begin
-                  @show eigvals(view(H,ilast-1:ilast, ilast-1:ilast),
-                                         view(B,ilast-1:ilast, ilast-1:ilast))
-                  end
-                  # go back for another single shift
-                  continue
-              end
-              s1inv = 1 / s1
-              a11 = H[ilast-1,ilast-1]
-              a21 = H[ilast,ilast-1]
-              a12 = H[ilast-1,ilast]
-              a22 = H[ilast,ilast]
+                B[ilast - 1, ilast - 1] = b11
+                B[ilast - 1, ilast] = 0
+                B[ilast, ilast - 1] = 0
+                B[ilast, ilast] = b22
+                if b22 < 0
+                    H[ifirstm:ilast, ilast] .= - H[ifirstm:ilast, ilast]
+                    B[ifirstm:ilast, ilast] .= - B[ifirstm:ilast, ilast]
+                    if wantZ
+                        Z[1:n, ilast] .= -Z[1:n, ilast]
+                    end
+                    b22 = - b22
+                end
+                # step 2: compute α, β
+                s1, _, wr, _, wi = _ggs_2x2(
+                    view(H, (ilast - 1):ilast, (ilast - 1):ilast),
+                    view(B, (ilast - 1):ilast, (ilast - 1):ilast),
+                    safmin * safety
+                )
+                if wi == 0 # perturbation put shift back on real line
+                    @mydebug println("backtracking to real shift")
+                    @mydebug begin
+                        @show eigvals(
+                            view(H, (ilast - 1):ilast, (ilast - 1):ilast),
+                            view(B, (ilast - 1):ilast, (ilast - 1):ilast)
+                        )
+                    end
+                    # go back for another single shift
+                    continue
+                end
+                s1inv = 1 / s1
+                a11 = H[ilast - 1, ilast - 1]
+                a21 = H[ilast, ilast - 1]
+                a12 = H[ilast - 1, ilast]
+                a22 = H[ilast, ilast]
 
-              # complex Givens on right
-              # assume some elt of sA-wB > unfl
-              c11r = s1 * a11 - wr * b11
-              c11i = -wi * b11
-              c12 = s1 * a12
-              c21 = s1 * a21
-              c22r = s1 * a22 - wr * b22
-              c22i = -wi * b22
-              if abs(c11r) + abs(c11i) + abs(c12) > abs(c21) + abs(c22r) + abs(c22i)
-                  t1 = hypot(c12, c11r, c11i)
-                  cz = c12 / t1
-                  szr = -c11r / t1
-                  szi = -c11i / t1
-              else
-                  cz = hypot(c22r, c22i)
-                  if cz <= safmin
-                      cz = zero(T)
-                      szr = one(T)
-                      szi = zero(T)
-                  else
-                      tr = c22r / cz
-                      ti = c22i / cz
-                      t1 = hypot(cz, c21)
-                      cz /= t1
-                      szr = -c21 * tr / t1
-                      szi = c21 * ti / t1
-                  end
-              end
-              # Givens on left
-              an = abs(a11) + abs(a12) + abs(a21) + abs(a22)
-              bn = abs(b11) + abs(b22)
-              wabs = abs(wr) + abs(wi)
-              if s1 * an > wabs * bn
-                  cq = cz * b11
-                  sqr = szr * b22
-                  sqi = -szi * b22
-              else
-                  a1r = cz * a11 + szr * a12
-                  a1i = szi * a12
-                  a2r = cz * a21 + szr * a22
-                  a2i = szi * a22
-                  cq = hypot(a1r, a1i)
-                  if cq <= safmin
-                      cq = zero(T)
-                      sqr = one(T)
-                      sqi = zero(T)
-                  else
-                      tr = a1r / cq
-                      ti = a1i / cq
-                      sqr = tr * a2r + ti * a2i
-                      sqi = ti * a2r - tr * a2i
-                  end
-              end
-              t1 = hypot(cq, sqr, sqi)
-              cq /= t1
-              sqr /= t1
-              sqi /= t1
-              # compute diagonal elts of QBZ
-              tr = sqr * szr - sqi * szi
-              ti = sqr * szi + sqi * szr
-              b1r = cq * cz * b11 + tr * b22
-              b1i = ti * b22
-              b1a = hypot(b1r, b1i)
-              b2r = cq * cz * b22 + tr * b11
-              b2i = -ti * b11
-              b2a = hypot(b2r, b2i)
-              # standardize
-              @mydebug println("deflating complex pair")
-              β[ilast - 1] = b1a
-              β[ilast] = b2a
-              α[ilast - 1] = (complex(wr, wi) * b1a) * s1inv
-              α[ilast] = (complex(wr, -wi) * b2a) * s1inv
-              ilast = ifirst - 1
-              if ilast < ilo # done with core block
-                  break
-              end
-              # reset counters and go on to next block
-              shiftcount = 0
-              eshift = zero(T)
-              if !wantSchur
-                  ilastm = ilast
-                  if ifirstm > ilast
-                      ifirstm = ilo
-                  end
-              end
-          else
-              # usual case: 3x3 or larger
-              # use Francis implicit double shift
+                # complex Givens on right
+                # assume some elt of sA-wB > unfl
+                c11r = s1 * a11 - wr * b11
+                c11i = -wi * b11
+                c12 = s1 * a12
+                c21 = s1 * a21
+                c22r = s1 * a22 - wr * b22
+                c22i = -wi * b22
+                if abs(c11r) + abs(c11i) + abs(c12) > abs(c21) + abs(c22r) + abs(c22i)
+                    t1 = hypot(c12, c11r, c11i)
+                    cz = c12 / t1
+                    szr = -c11r / t1
+                    szi = -c11i / t1
+                else
+                    cz = hypot(c22r, c22i)
+                    if cz <= safmin
+                        cz = zero(T)
+                        szr = one(T)
+                        szi = zero(T)
+                    else
+                        tr = c22r / cz
+                        ti = c22i / cz
+                        t1 = hypot(cz, c21)
+                        cz /= t1
+                        szr = -c21 * tr / t1
+                        szi = c21 * ti / t1
+                    end
+                end
+                # Givens on left
+                an = abs(a11) + abs(a12) + abs(a21) + abs(a22)
+                bn = abs(b11) + abs(b22)
+                wabs = abs(wr) + abs(wi)
+                if s1 * an > wabs * bn
+                    cq = cz * b11
+                    sqr = szr * b22
+                    sqi = -szi * b22
+                else
+                    a1r = cz * a11 + szr * a12
+                    a1i = szi * a12
+                    a2r = cz * a21 + szr * a22
+                    a2i = szi * a22
+                    cq = hypot(a1r, a1i)
+                    if cq <= safmin
+                        cq = zero(T)
+                        sqr = one(T)
+                        sqi = zero(T)
+                    else
+                        tr = a1r / cq
+                        ti = a1i / cq
+                        sqr = tr * a2r + ti * a2i
+                        sqi = ti * a2r - tr * a2i
+                    end
+                end
+                t1 = hypot(cq, sqr, sqi)
+                cq /= t1
+                sqr /= t1
+                sqi /= t1
+                # compute diagonal elts of QBZ
+                tr = sqr * szr - sqi * szi
+                ti = sqr * szi + sqi * szr
+                b1r = cq * cz * b11 + tr * b22
+                b1i = ti * b22
+                b1a = hypot(b1r, b1i)
+                b2r = cq * cz * b22 + tr * b11
+                b2i = -ti * b11
+                b2a = hypot(b2r, b2i)
+                # standardize
+                @mydebug println("deflating complex pair")
+                β[ilast - 1] = b1a
+                β[ilast] = b2a
+                α[ilast - 1] = (complex(wr, wi) * b1a) * s1inv
+                α[ilast] = (complex(wr, -wi) * b2a) * s1inv
+                ilast = ifirst - 1
+                if ilast < ilo # done with core block
+                    break
+                end
+                # reset counters and go on to next block
+                shiftcount = 0
+                eshift = zero(T)
+                if !wantSchur
+                    ilastm = ilast
+                    if ifirstm > ilast
+                        ifirstm = ilo
+                    end
+                end
+            else
+                # usual case: 3x3 or larger
+                # use Francis implicit double shift
 
-              # eigval eqn is ω^2 - c ω + d = 0
-              # compute first column of (AB⁻¹)² - c AB⁻¹ + d
-              # assuming block is at least 3x3
-              ad11 = ( ascale*H[ ilast-1, ilast-1 ] ) /( bscale*B[ ilast-1, ilast-1 ] )
-              ad21 = ( ascale*H[ ilast, ilast-1 ] ) /( bscale*B[ ilast-1, ilast-1 ] )
-              ad12 = ( ascale*H[ ilast-1, ilast ] ) /( bscale*B[ ilast, ilast ] )
-              ad22 = ( ascale*H[ ilast, ilast ] ) /( bscale*B[ ilast, ilast ] )
-              u12 = B[ ilast-1, ilast ] / B[ ilast, ilast ]
-              ad11l = ( ascale*H[ ifirst, ifirst ] ) /( bscale*B[ ifirst, ifirst ] )
-              ad21l = ( ascale*H[ ifirst+1, ifirst ] ) /( bscale*B[ ifirst, ifirst ] )
-              ad12l = ( ascale*H[ ifirst, ifirst+1 ] ) /( bscale*B[ ifirst+1, ifirst+1 ] )
-              ad22l = ( ascale*H[ ifirst+1, ifirst+1 ] ) /( bscale*B[ ifirst+1, ifirst+1 ] )
-              ad32l = ( ascale*H[ ifirst+2, ifirst+1 ] ) /( bscale*B[ ifirst+1, ifirst+1 ] )
-              u12l = B[ ifirst, ifirst+1 ] / B[ ifirst+1, ifirst+1 ]
+                # eigval eqn is ω^2 - c ω + d = 0
+                # compute first column of (AB⁻¹)² - c AB⁻¹ + d
+                # assuming block is at least 3x3
+                ad11 = (ascale * H[ilast - 1, ilast - 1]) / (bscale * B[ilast - 1, ilast - 1])
+                ad21 = (ascale * H[ilast, ilast - 1]) / (bscale * B[ilast - 1, ilast - 1])
+                ad12 = (ascale * H[ilast - 1, ilast]) / (bscale * B[ilast, ilast])
+                ad22 = (ascale * H[ilast, ilast]) / (bscale * B[ilast, ilast])
+                u12 = B[ilast - 1, ilast] / B[ilast, ilast]
+                ad11l = (ascale * H[ifirst, ifirst]) / (bscale * B[ifirst, ifirst])
+                ad21l = (ascale * H[ifirst + 1, ifirst]) / (bscale * B[ifirst, ifirst])
+                ad12l = (ascale * H[ifirst, ifirst + 1]) / (bscale * B[ifirst + 1, ifirst + 1])
+                ad22l = (ascale * H[ifirst + 1, ifirst + 1]) / (bscale * B[ifirst + 1, ifirst + 1])
+                ad32l = (ascale * H[ifirst + 2, ifirst + 1]) / (bscale * B[ifirst + 1, ifirst + 1])
+                u12l = B[ifirst, ifirst + 1] / B[ifirst + 1, ifirst + 1]
 
-              v[1] = (( ad11-ad11l )*( ad22-ad11l ) - ad12*ad21 +ad21*u12*ad11l
-                        + ( ad12l-ad11l*u12l )*ad21l)
-              v[2] = (( ( ad22l-ad11l )-ad21l*u12l-( ad11-ad11l )-( ad22-ad11l )
-                          +ad21*u12 ))*ad21l
-              v[3] = ad32l*ad21l
-              _istart = ifirst
+                v[1] = (
+                    (ad11 - ad11l) * (ad22 - ad11l) - ad12 * ad21 + ad21 * u12 * ad11l
+                        + (ad12l - ad11l * u12l) * ad21l
+                )
+                v[2] = (
+                    (
+                        (ad22l - ad11l) - ad21l * u12l - (ad11 - ad11l) - (ad22 - ad11l)
+                            + ad21 * u12
+                    )
+                ) * ad21l
+                v[3] = ad32l * ad21l
+                _istart = ifirst
 
-              τ = _reflector!(v)
-              v[1] = one(T)
-              # sweep
-              for j in _istart:ilast-2
-                  if j > _istart
-                      v .= H[j:j+2,j-1]
-                      τ = _reflector!(v)
-                      H[j,j-1] = v[1]
-                      v[1] = one(T)
-                      H[j+1:j+2, j-1] .= zero(T)
-                  end
-                  t2 = τ * v[2]
-                  t3 = τ * v[3]
-                  for jc in j:ilastm
-                      t1 = H[j,jc] + v[2] * H[j+1,jc] + v[3] * H[j+2,jc]
-                      H[j,jc] -= t1 * τ
-                      H[j+1,jc] -= t1 * t2
-                      H[j+2,jc] -= t1 * t3
-                      t1 = B[j,jc] + v[2] * B[j+1,jc] + v[3] * B[j+2,jc]
-                      B[j,jc] -= t1 * τ
-                      B[j+1,jc] -= t1 * t2
-                      B[j+2,jc] -= t1 * t3
-                  end
-                  if wantQ
-                      for jr in 1:n
-                          t1 = Q[jr,j] + v[2] * Q[jr,j+1] + v[3] * Q[jr,j+2]
-                          Q[jr,j] -= t1 * τ
-                          Q[jr,j+1] -= t1 * t2
-                          Q[jr,j+2] -= t1 * t3
-                      end
-                  end
-                  # zero j-th column of B
-                  # swap rows to pivot
-                  pivot = false
-                  t1 = max(abs(B[j+1,j+1]), abs(B[j+1,j+2]))
-                  t2 = max(abs(B[j+2,j+1]), abs(B[j+2,j+2]))
-                  if max(t1,t2) < safmin
-                      scale = zero(T)
-                      u1 = one(T)
-                      u2 = zero(T)
-                  else
-                      if t1 >= t2
-                          w11 = B[j+1,j+1]
-                          w21 = B[j+2,j+1]
-                          w12 = B[j+1,j+2]
-                          w22 = B[j+2,j+2]
-                          u1 = B[j+1,j]
-                          u2 = B[j+2,j]
-                      else
-                          w21 = B[j+1,j+1]
-                          w11 = B[j+2,j+1]
-                          w22 = B[j+1,j+2]
-                          w12 = B[j+2,j+2]
-                          u2 = B[j+1,j]
-                          u1 = B[j+2,j]
-                      end
-                      if abs(w12) > abs(w11)
-                          pivot = true
-                          w11,w12 = w12,w11
-                          w21,w22 = w22,w21
-                      end
-                      # LU factor
-                      t1 = w21 / w11
-                      u2 -= t1 * u1
-                      w22 -= t1 * w12
-                      w21 = zero(T)
-                      # compute scale
-                      scale = one(T)
-                      if abs(w22) < safmin
-                          scale = zero(T)
-                      else
-                          if abs(w22) < abs(u2)
-                              scale = abs(w22 / u2)
-                          end
-                          if abs(w11) < abs(u1)
-                              scale = min(scale, abs(w11 / u1))
-                          end
-                          # solve
-                          u2 = (scale * u2) / w22
-                          u1 = (scale * u1 - w12 * u2) / w11
-                      end
-                  end
-                  if pivot
-                      u1,u2 = u2,u1
-                  end
-                  # Householder vector
-                  t1 = hypot(scale, u1, u2)
-                  τ = one(T) + scale / t1
-                  vs = -one(T) / (scale + t1)
-                  v[1] = one(T)
-                  v[2] = vs * u1
-                  v[3] = vs * u2
-                  t2 = τ * v[2]
-                  t3 = τ * v[3]
-                  for jr in ifirstm:min(j+3, ilast)
-                      t1 = H[jr,j] + v[2] * H[jr,j+1] + v[3] * H[jr,j+2]
-                      H[jr,j] -= t1 * τ
-                      H[jr,j+1] -= t2 * t1
-                      H[jr,j+2] -= t3 * t1
-                  end
-                  for jr in ifirstm:j+2
-                      t1 = B[jr,j] + v[2] * B[jr,j+1] + v[3] * B[jr,j+2]
-                      B[jr,j] -= t1 * τ
-                      B[jr,j+1] -= t2 * t1
-                      B[jr,j+2] -= t3 * t1
-                  end
-                  if wantZ
-                      for jr in 1:n
-                          t1 = Z[jr,j] + v[2] * Z[jr,j+1] + v[3] * Z[jr,j+2]
-                          Z[jr,j] -= t1 * τ
-                          Z[jr,j+1] -= t2 * t1
-                          Z[jr,j+2] -= t3 * t1
-                      end
-                  end
-                  B[j+1:j+2, j] .= zero(T)
-              end # sweep
+                τ = _reflector!(v)
+                v[1] = one(T)
+                # sweep
+                for j in _istart:(ilast - 2)
+                    if j > _istart
+                        v .= H[j:(j + 2), j - 1]
+                        τ = _reflector!(v)
+                        H[j, j - 1] = v[1]
+                        v[1] = one(T)
+                        H[(j + 1):(j + 2), j - 1] .= zero(T)
+                    end
+                    t2 = τ * v[2]
+                    t3 = τ * v[3]
+                    for jc in j:ilastm
+                        t1 = H[j, jc] + v[2] * H[j + 1, jc] + v[3] * H[j + 2, jc]
+                        H[j, jc] -= t1 * τ
+                        H[j + 1, jc] -= t1 * t2
+                        H[j + 2, jc] -= t1 * t3
+                        t1 = B[j, jc] + v[2] * B[j + 1, jc] + v[3] * B[j + 2, jc]
+                        B[j, jc] -= t1 * τ
+                        B[j + 1, jc] -= t1 * t2
+                        B[j + 2, jc] -= t1 * t3
+                    end
+                    if wantQ
+                        for jr in 1:n
+                            t1 = Q[jr, j] + v[2] * Q[jr, j + 1] + v[3] * Q[jr, j + 2]
+                            Q[jr, j] -= t1 * τ
+                            Q[jr, j + 1] -= t1 * t2
+                            Q[jr, j + 2] -= t1 * t3
+                        end
+                    end
+                    # zero j-th column of B
+                    # swap rows to pivot
+                    pivot = false
+                    t1 = max(abs(B[j + 1, j + 1]), abs(B[j + 1, j + 2]))
+                    t2 = max(abs(B[j + 2, j + 1]), abs(B[j + 2, j + 2]))
+                    if max(t1, t2) < safmin
+                        scale = zero(T)
+                        u1 = one(T)
+                        u2 = zero(T)
+                    else
+                        if t1 >= t2
+                            w11 = B[j + 1, j + 1]
+                            w21 = B[j + 2, j + 1]
+                            w12 = B[j + 1, j + 2]
+                            w22 = B[j + 2, j + 2]
+                            u1 = B[j + 1, j]
+                            u2 = B[j + 2, j]
+                        else
+                            w21 = B[j + 1, j + 1]
+                            w11 = B[j + 2, j + 1]
+                            w22 = B[j + 1, j + 2]
+                            w12 = B[j + 2, j + 2]
+                            u2 = B[j + 1, j]
+                            u1 = B[j + 2, j]
+                        end
+                        if abs(w12) > abs(w11)
+                            pivot = true
+                            w11, w12 = w12, w11
+                            w21, w22 = w22, w21
+                        end
+                        # LU factor
+                        t1 = w21 / w11
+                        u2 -= t1 * u1
+                        w22 -= t1 * w12
+                        w21 = zero(T)
+                        # compute scale
+                        scale = one(T)
+                        if abs(w22) < safmin
+                            scale = zero(T)
+                        else
+                            if abs(w22) < abs(u2)
+                                scale = abs(w22 / u2)
+                            end
+                            if abs(w11) < abs(u1)
+                                scale = min(scale, abs(w11 / u1))
+                            end
+                            # solve
+                            u2 = (scale * u2) / w22
+                            u1 = (scale * u1 - w12 * u2) / w11
+                        end
+                    end
+                    if pivot
+                        u1, u2 = u2, u1
+                    end
+                    # Householder vector
+                    t1 = hypot(scale, u1, u2)
+                    τ = one(T) + scale / t1
+                    vs = -one(T) / (scale + t1)
+                    v[1] = one(T)
+                    v[2] = vs * u1
+                    v[3] = vs * u2
+                    t2 = τ * v[2]
+                    t3 = τ * v[3]
+                    for jr in ifirstm:min(j + 3, ilast)
+                        t1 = H[jr, j] + v[2] * H[jr, j + 1] + v[3] * H[jr, j + 2]
+                        H[jr, j] -= t1 * τ
+                        H[jr, j + 1] -= t2 * t1
+                        H[jr, j + 2] -= t3 * t1
+                    end
+                    for jr in ifirstm:(j + 2)
+                        t1 = B[jr, j] + v[2] * B[jr, j + 1] + v[3] * B[jr, j + 2]
+                        B[jr, j] -= t1 * τ
+                        B[jr, j + 1] -= t2 * t1
+                        B[jr, j + 2] -= t3 * t1
+                    end
+                    if wantZ
+                        for jr in 1:n
+                            t1 = Z[jr, j] + v[2] * Z[jr, j + 1] + v[3] * Z[jr, j + 2]
+                            Z[jr, j] -= t1 * τ
+                            Z[jr, j + 1] -= t2 * t1
+                            Z[jr, j + 2] -= t3 * t1
+                        end
+                    end
+                    B[(j + 1):(j + 2), j] .= zero(T)
+                end # sweep
 
-              # use Givens rotations for last elements
-              # rotations from left
-              j = ilast - 1
-              c,s,r = givensAlgorithm(H[j,j-1], H[j+1,j-1])
-              H[j,j-1] = r
-              H[j+1,j-1] = zero(T)
-              for jc in j:ilastm
-                  t1 = c * H[j,jc] + s * H[j+1,jc]
-                  H[j+1,jc] = -s * H[j,jc] + c * H[j+1,jc]
-                  H[j,jc] = t1
-                  t2 = c * B[j,jc] + s * B[j+1,jc]
-                  B[j+1,jc] = -s * B[j,jc] + c * B[j+1,jc]
-                  B[j,jc] = t2
-              end
-              if wantQ
-                  for jr in 1:n
-                      t1 = c * Q[jr,j] + s * Q[jr,j+1]
-                      Q[jr,j+1] = -s * Q[jr,j] + c * Q[jr,j+1]
-                      Q[jr,j] = t1
-                  end
-              end
-              # rotations from left
-              c,s,r = givensAlgorithm(B[j+1,j+1], B[j+1,j])
-              B[j+1,j+1] = r
-              B[j+1,j] = zero(T)
-              for jr in ifirstm:ilast
-                  t1 = c * H[jr,j+1] + s * H[jr,j]
-                  H[jr,j] = -s * H[jr,j+1] + c * H[jr,j]
-                  H[jr,j+1] = t1
-              end
-              for jr in ifirstm:ilast-1
-                  t1 = c * B[jr,j+1] + s * B[jr,j]
-                  B[jr,j] = -s * B[jr,j+1] + c * B[jr,j]
-                  B[jr,j+1] = t1
-              end
-              if wantZ
-                  for jr in 1:n
-                      t1 = c * Z[jr,j+1] + s * Z[jr,j]
-                      Z[jr,j] = -s * Z[jr,j+1] + c * Z[jr,j]
-                      Z[jr,j+1] = t1
-                  end
-              end
+                # use Givens rotations for last elements
+                # rotations from left
+                j = ilast - 1
+                c, s, r = givensAlgorithm(H[j, j - 1], H[j + 1, j - 1])
+                H[j, j - 1] = r
+                H[j + 1, j - 1] = zero(T)
+                for jc in j:ilastm
+                    t1 = c * H[j, jc] + s * H[j + 1, jc]
+                    H[j + 1, jc] = -s * H[j, jc] + c * H[j + 1, jc]
+                    H[j, jc] = t1
+                    t2 = c * B[j, jc] + s * B[j + 1, jc]
+                    B[j + 1, jc] = -s * B[j, jc] + c * B[j + 1, jc]
+                    B[j, jc] = t2
+                end
+                if wantQ
+                    for jr in 1:n
+                        t1 = c * Q[jr, j] + s * Q[jr, j + 1]
+                        Q[jr, j + 1] = -s * Q[jr, j] + c * Q[jr, j + 1]
+                        Q[jr, j] = t1
+                    end
+                end
+                # rotations from left
+                c, s, r = givensAlgorithm(B[j + 1, j + 1], B[j + 1, j])
+                B[j + 1, j + 1] = r
+                B[j + 1, j] = zero(T)
+                for jr in ifirstm:ilast
+                    t1 = c * H[jr, j + 1] + s * H[jr, j]
+                    H[jr, j] = -s * H[jr, j + 1] + c * H[jr, j]
+                    H[jr, j + 1] = t1
+                end
+                for jr in ifirstm:(ilast - 1)
+                    t1 = c * B[jr, j + 1] + s * B[jr, j]
+                    B[jr, j] = -s * B[jr, j + 1] + c * B[jr, j]
+                    B[jr, j + 1] = t1
+                end
+                if wantZ
+                    for jr in 1:n
+                        t1 = c * Z[jr, j + 1] + s * Z[jr, j]
+                        Z[jr, j] = -s * Z[jr, j + 1] + c * Z[jr, j]
+                        Z[jr, j + 1] = t1
+                    end
+                end
 
-          end # 2x2 vs larger block branches
-      end # single/double shift branches
+            end # 2x2 vs larger block branches
+        end # single/double shift branches
 
         if it >= maxiter
             throw(UnconvergedException("iteration limit $maxiter reached"))
@@ -748,21 +779,21 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     end # iteration loop
 
     # set eigenvalues for trivial leading part
-    for j in 1:ilo-1
-        if B[j,j] < 0
+    for j in 1:(ilo - 1)
+        if B[j, j] < 0
             if wantSchur
-                H[1:j,j] .= -H[1:j,j]
-                B[1:j,j] .= -B[1:j,j]
+                H[1:j, j] .= -H[1:j, j]
+                B[1:j, j] .= -B[1:j, j]
             else
-                H[j,j] = -H[j,j]
-                B[j,j] = -B[j,j]
+                H[j, j] = -H[j, j]
+                B[j, j] = -B[j, j]
             end
             if wantZ
                 Z[1:n, j] .= -Z[1:n, j]
             end
         end
-        α[j] = H[j,j]
-        β[j] = B[j,j]
+        α[j] = H[j, j]
+        β[j] = B[j, j]
     end
 
     return α, β, H, B, Q, Z
@@ -775,24 +806,24 @@ Compute eigenvalues of real generalized 2x2 problem (A - w B) with scaling to av
 over-/underflow. Actual eigvals are `(wr1 + im * wi) / scale1` etc.
 B must be upper triangular. See LAPACK dlag2 for other constraints on A,B.
 """
-function _ggs_2x2(A::AbstractMatrix{T},B,safmin) where {T <: AbstractFloat}
+function _ggs_2x2(A::AbstractMatrix{T}, B, safmin) where {T <: AbstractFloat}
     # translation of LAPACK dlag2
     rtmin = sqrt(safmin)
     rtmax = one(T) / rtmin
     safmax = one(T) / safmin
     fuzzy1 = one(T) + sqrt(sqrt(eps(one(T)))) / 10
 
-    anorm = max(abs(A[1,1]) + abs(A[2,1]), abs(A[1,2]) + abs(A[2,2]), safmin)
+    anorm = max(abs(A[1, 1]) + abs(A[2, 1]), abs(A[1, 2]) + abs(A[2, 2]), safmin)
     ascale = one(T) / anorm
-    a11 = ascale * A[1,1]
-    a12 = ascale * A[1,2]
-    a21 = ascale * A[2,1]
-    a22 = ascale * A[2,2]
+    a11 = ascale * A[1, 1]
+    a12 = ascale * A[1, 2]
+    a21 = ascale * A[2, 1]
+    a22 = ascale * A[2, 2]
 
     # perturb to avoid singularity if needed
-    b11 = B[1,1]
-    b12 = B[1,2]
-    b22 = B[2,2]
+    b11 = B[1, 1]
+    b12 = B[1, 2]
+    b22 = B[2, 2]
     bmin = rtmin * max(abs(b11), abs(b12), abs(b22), rtmin)
     if abs(b11) < bmin
         b11 = b11 < 0 ? -bmin : bmin
@@ -827,12 +858,12 @@ function _ggs_2x2(A::AbstractMatrix{T},B,safmin) where {T <: AbstractFloat}
         shift = s2
     end
     qq = ss * as12
-    if abs(pp*rtmin) >= one(T)
+    if abs(pp * rtmin) >= one(T)
         discr = (rtmin * pp)^2 + qq * safmin
         r = sqrt(abs(discr)) * rtmax
     else
         if pp^2 + abs(qq) <= safmin
-            discr = (rtmax * pp)^2 + qq*safmax
+            discr = (rtmax * pp)^2 + qq * safmax
             r = sqrt(abs(discr)) * rtmin
         else
             discr = pp^2 + qq
@@ -878,7 +909,7 @@ function _ggs_2x2(A::AbstractMatrix{T},B,safmin) where {T <: AbstractFloat}
         c5 = one(T)
     end
     wabs = abs(wr1) + abs(wi)
-    wsize = max(safmin, c1, fuzzy1 * (wabs * c2 + c3), min(c4, max(wabs, c5)/2))
+    wsize = max(safmin, c1, fuzzy1 * (wabs * c2 + c3), min(c4, max(wabs, c5) / 2))
     if wsize != one(T)
         wscale = one(T) / wsize
         if wsize > one(T)
@@ -897,7 +928,7 @@ function _ggs_2x2(A::AbstractMatrix{T},B,safmin) where {T <: AbstractFloat}
         scale2 = scale1
     end
     if wi == 0
-        wsize = max(safmin, c1, fuzzy1 * (abs(wr2) * c2 + c3), min(c4, max(abs(wr2), c5)/2))
+        wsize = max(safmin, c1, fuzzy1 * (abs(wr2) * c2 + c3), min(c4, max(abs(wr2), c5) / 2))
         if wsize != one(T)
             wscale = one(T) / wsize
             if wsize > one(T)
@@ -916,9 +947,9 @@ end
 # SVD of real upper triangular 2x2 matrix
 # translation of LAPACK dlasv2
 function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
-    ft = A[1,1]
-    gt = A[1,2]
-    ht = A[2,2]
+    ft = A[1, 1]
+    gt = A[1, 2]
+    ht = A[2, 2]
     fa = abs(ft)
     ha = abs(ht)
     pmax = 1
@@ -942,11 +973,11 @@ function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
         ga_small = true
         if ga > fa
             pmax = 2
-            if (fa/ga) < eps(one(T))
+            if (fa / ga) < eps(one(T))
                 # very large ga
                 ga_small = false
                 ssmax = ga
-                ssmin = (ha > one(T)) ? (fa / (ga/ha)) : ((fa/ha) * ha)
+                ssmin = (ha > one(T)) ? (fa / (ga / ha)) : ((fa / ha) * ha)
                 clt = one(T)
                 slt = ht / gt
                 srt = one(T)
@@ -964,7 +995,7 @@ function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
             mm = m * m
             tt = t * t
             s = sqrt(tt + mm)
-            r = (l == 0) ? abs(m) : sqrt(l*l + mm)
+            r = (l == 0) ? abs(m) : sqrt(l * l + mm)
             a = (s + r) / 2
             # note that 1 ≤ s ≤ 1 + 1/ϵ and 0 ≤ r ≤ 1 + 1/ϵ and a ≤ 1 + abs(m)
             ssmin = ha / a
@@ -972,14 +1003,14 @@ function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
             if mm == 0
                 # very tiny m
                 if l == 0
-                    t = copysign(T(2),ft) * copysign(one(T), gt)
+                    t = copysign(T(2), ft) * copysign(one(T), gt)
                 else
                     t = gt / copysign(d, ft) + m / t
                 end
             else
                 t = (m / (s + t) + m / (r + l)) * (one(T) + a)
             end
-            l = sqrt(t*t + T(4))
+            l = sqrt(t * t + T(4))
             crt = T(2) / l
             srt = t / l
             clt = (crt + srt * m) / a
@@ -994,13 +1025,13 @@ function _gsvd_2x2(A::AbstractMatrix{T}) where {T <: AbstractFloat}
         csr, snr = crt, srt
     end
     if pmax == 1
-        tsgn = copysign(one(T), csr) * copysign(one(T), csl) * copysign(one(T), A[1,1])
+        tsgn = copysign(one(T), csr) * copysign(one(T), csl) * copysign(one(T), A[1, 1])
     elseif pmax == 2
-        tsgn = copysign(one(T), snr) * copysign(one(T), csl) * copysign(one(T), A[1,2])
+        tsgn = copysign(one(T), snr) * copysign(one(T), csl) * copysign(one(T), A[1, 2])
     else # pmax == 3
-        tsgn = copysign(one(T), snr) * copysign(one(T), snl) * copysign(one(T), A[2,2])
+        tsgn = copysign(one(T), snr) * copysign(one(T), snl) * copysign(one(T), A[2, 2])
     end
     ssmax = copysign(ssmax, tsgn)
-    ssmin = copysign(ssmin, tsgn * copysign(one(T), A[1,1]) * copysign(one(T), A[2,2]))
-    return ssmin,ssmax,snr,csr,snl,csl
+    ssmin = copysign(ssmin, tsgn * copysign(one(T), A[1, 1]) * copysign(one(T), A[2, 2]))
+    return ssmin, ssmax, snr, csr, snl, csl
 end

@@ -13,10 +13,12 @@
 # T overwrites B
 # S overwrites A
 
-function ggschur!(A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
-                  wantQ::Bool=true, wantZ::Bool=true,
-                  scale::Bool=true,
-                  kwargs...) where Ty <: Complex
+function ggschur!(
+        A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
+        wantQ::Bool = true, wantZ::Bool = true,
+        scale::Bool = true,
+        kwargs...
+    ) where {Ty <: Complex}
 
     n = checksquare(A)
     nb = checksquare(B)
@@ -47,7 +49,7 @@ function ggschur!(A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
     if wantZ
         Z = Matrix{Ty}(I, n, n)
     else
-        Z =  Matrix{Ty}(undef, 0, 0)
+        Z = Matrix{Ty}(undef, 0, 0)
     end
 
     # materializing R may waste memory; can we rely on storage in modified B?
@@ -72,34 +74,35 @@ end
 
 # B temporarily loses triangularity, so is not specially typed.
 # compare to zgghrd
-function _hessenberg!(A::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z;
-                      ilo=1, ihi=size(A,1)
-                      ) where T
+function _hessenberg!(
+        A::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z;
+        ilo = 1, ihi = size(A, 1)
+    ) where {T}
     wantQ = !isempty(Q)
     wantZ = !isempty(Z)
 
     triu!(B)
 
-    for jc = ilo:ihi-2
-        for jr = ihi:-1:jc+2
+    for jc in ilo:(ihi - 2)
+        for jr in ihi:-1:(jc + 2)
             # rotate rows jr-1,jr to null A[jr,jc]
-            Gq,r = givens(A,jr-1,jr,jc)
+            Gq, r = givens(A, jr - 1, jr, jc)
             lmul!(Gq, A)
             lmul!(Gq, B)
             if wantQ
                 rmul!(Q, Gq')
             end
             # rotate cols jr,jr-1 to null B[jr,jr-1]
-            Gz,r = givens(B',jr,jr-1,jr)
-            rmul!(A,Gz')
-            rmul!(B,Gz')
+            Gz, r = givens(B', jr, jr - 1, jr)
+            rmul!(A, Gz')
+            rmul!(B, Gz')
             if wantZ
                 rmul!(Z, Gz')
             end
         end
     end
 
-    return triu!(A,-1), triu!(B), Q, Z
+    return triu!(A, -1), triu!(B), Q, Z
 end
 
 @enum _DeflateCase begin
@@ -122,9 +125,10 @@ end
 # H is Hessenberg
 # B is upper-triangular
 # This is an internal routine so we don't check.
-function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
-               ilo=1, ihi=size(H,1), maxiter=100*(ihi-ilo+1)
-               ) where {T <: Complex}
+function _gqz!(
+        H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
+        ilo = 1, ihi = size(H, 1), maxiter = 100 * (ihi - ilo + 1)
+    ) where {T <: Complex}
     n = checksquare(H)
     wantQ = !isempty(Q)
     wantZ = !isempty(Z)
@@ -135,8 +139,8 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     RT = real(T)
     ulp = eps(RT)
     safmin = safemin(RT)
-    anorm = norm(view(H,ilo:ihi,ilo:ihi),2) # Frobenius
-    bnorm = norm(view(B,ilo:ihi,ilo:ihi),2) # Frobenius
+    anorm = norm(view(H, ilo:ihi, ilo:ihi), 2) # Frobenius
+    bnorm = norm(view(B, ilo:ihi, ilo:ihi), 2) # Frobenius
     atol = max(safmin, ulp * anorm)
     btol = max(safmin, ulp * bnorm)
     ascale = one(RT) / max(safmin, anorm)
@@ -144,18 +148,18 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     half = 1 / RT(2)
 
     # set trivial trailing eigvals
-    for j in ihi+1:n
-        α[j] = H[j,j]
-        β[j] = B[j,j]
+    for j in (ihi + 1):n
+        α[j] = H[j, j]
+        β[j] = B[j, j]
     end
 
     ifirst = ilo
     ilast = ihi
 
     if wantSchur
-        ifirstm, ilastm = 1,n
+        ifirstm, ilastm = 1, n
     else
-        ifirstm, ilastm = ilo,ihi
+        ifirstm, ilastm = ilo, ihi
     end
 
     shiftcount = 0
@@ -179,70 +183,78 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         # specialize for j==ilast
         if ilast == ilo
             br = _deflatec_normal
-        elseif abs1(H[ilast,ilast-1]) < max(safmin,
-                                            ulp * (abs1(H[ilast, ilast])
-                                                   + abs1(H[ilast-1,ilast-1])))
-            H[ilast, ilast-1] = 0
+        elseif abs1(H[ilast, ilast - 1]) < max(
+                safmin,
+                ulp * (
+                    abs1(H[ilast, ilast])
+                        + abs1(H[ilast - 1, ilast - 1])
+                )
+            )
+            H[ilast, ilast - 1] = 0
             br = _deflatec_normal
             @mydebug println("trivial split at $ilast")
         end
         # For now, we follow LAPACK quite closely.
         if br == _deflatec_unknown
-            if abs(B[ilast,ilast]) <= btol
-                B[ilast,ilast] = 0
+            if abs(B[ilast, ilast]) <= btol
+                B[ilast, ilast] = 0
                 br = _deflatec_inf
                 @mydebug println("split on singular entry in B at $ilast")
             else
                 # general case
-                for j=ilast-1:-1:ilo
+                for j in (ilast - 1):-1:ilo
                     # Test 1
                     split_test1 = false
-                    if j==ilo
+                    if j == ilo
                         split_test1 = true
                     else
                         # once had <= atol here
-                        if abs1(H[j,j-1]) <= max(safmin,
-                                                 ulp * (abs1(H[j,j]) + abs1(H[j-1,j-1])))
-                            H[j,j-1] = 0
+                        if abs1(H[j, j - 1]) <= max(
+                                safmin,
+                                ulp * (abs1(H[j, j]) + abs1(H[j - 1, j - 1]))
+                            )
+                            H[j, j - 1] = 0
                             split_test1 = true
                         end
                     end
                     # Test 2
-                    split_test2 = abs(B[j,j]) < btol
+                    split_test2 = abs(B[j, j]) < btol
                     if split_test2
-                        B[j,j] = 0
+                        B[j, j] = 0
                         # Test 1a: check for 2 consec. small subdiags in H
                         split_test1a = !split_test1 &&
-                            (abs1(H[j,j-1]) * (ascale * abs1(H[j+1,j]))
-                             <= abs1(H[j,j]) * (ascale * atol))
+                            (
+                            abs1(H[j, j - 1]) * (ascale * abs1(H[j + 1, j]))
+                                <= abs1(H[j, j]) * (ascale * atol)
+                        )
                         # if both tests pass, split 1x1 block off top
                         # if remaining leading diagonal elt vanishes, iterate
                         if split_test1 || split_test1a
                             @mydebug println("splitting 1x1 at top (j=$j), singular B")
-                            for jch=j:ilast-1
-                                G,r = givens(H[jch,jch],H[jch+1,jch],jch,jch+1)
-                                H[jch,jch] = r
-                                H[jch+1,jch] = 0
-                                lmul!(G,view(H,:,jch+1:ilastm))
-                                lmul!(G,view(B,:,jch+1:ilastm))
+                            for jch in j:(ilast - 1)
+                                G, r = givens(H[jch, jch], H[jch + 1, jch], jch, jch + 1)
+                                H[jch, jch] = r
+                                H[jch + 1, jch] = 0
+                                lmul!(G, view(H, :, (jch + 1):ilastm))
+                                lmul!(G, view(B, :, (jch + 1):ilastm))
                                 if wantQ
                                     rmul!(Q, G')
                                 end
                                 if split_test1a
-                                    H[jch,jch-1] *= G.c
+                                    H[jch, jch - 1] *= G.c
                                 end
                                 split_test1a = false
-                                if abs1(B[jch+1, jch+1]) > btol
-                                    if jch+1 >= ilast
+                                if abs1(B[jch + 1, jch + 1]) > btol
+                                    if jch + 1 >= ilast
                                         br = _deflatec_normal
                                         break
                                     else
-                                        ifirst = jch+1
+                                        ifirst = jch + 1
                                         br = _deflatec_none
                                         break
                                     end
                                 end
-                                B[jch+1, jch+1] = 0
+                                B[jch + 1, jch + 1] = 0
                             end # jch loop
                             if br == _deflatec_unknown
                                 br = _deflatec_inf
@@ -252,26 +264,30 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
                             # only test 2 passed: chase 0 to B[ilast,ilast]
                             # then process as above
                             @mydebug println("chasing diag 0 in B from $j to $ilast")
-                            for jch=j:ilast-1
-                                G,r = givens(B[jch,jch+1],B[jch+1,jch+1],
-                                             jch,jch+1)
-                                B[jch,jch+1] = r
-                                B[jch+1,jch+1] = 0
-                                if jch < ilastm-1
-                                    lmul!(G,view(B,:,jch+2:ilastm))
+                            for jch in j:(ilast - 1)
+                                G, r = givens(
+                                    B[jch, jch + 1], B[jch + 1, jch + 1],
+                                    jch, jch + 1
+                                )
+                                B[jch, jch + 1] = r
+                                B[jch + 1, jch + 1] = 0
+                                if jch < ilastm - 1
+                                    lmul!(G, view(B, :, (jch + 2):ilastm))
                                 end
-                                lmul!(G,view(H,:,jch-1:ilastm))
+                                lmul!(G, view(H, :, (jch - 1):ilastm))
                                 if wantQ
-                                    rmul!(Q,G')
+                                    rmul!(Q, G')
                                 end
-                                G,r = givens(conj(H[jch+1,jch]),conj(H[jch+1,jch-1]),
-                                             jch,jch-1)
-                                H[jch+1,jch] = r'
-                                H[jch+1,jch-1] = 0
-                                rmul!(view(H,ifirstm:jch,:),G')
-                                rmul!(view(B,ifirstm:jch+1,:),G')
+                                G, r = givens(
+                                    conj(H[jch + 1, jch]), conj(H[jch + 1, jch - 1]),
+                                    jch, jch - 1
+                                )
+                                H[jch + 1, jch] = r'
+                                H[jch + 1, jch - 1] = 0
+                                rmul!(view(H, ifirstm:jch, :), G')
+                                rmul!(view(B, ifirstm:(jch + 1), :), G')
                                 if wantZ
-                                    rmul!(Z,G')
+                                    rmul!(Z, G')
                                 end
                             end # jch loop
                             br = _deflatec_inf
@@ -291,38 +307,38 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
             end # B[ilast,ilast] is/is-not tiny branches
             if br == _deflatec_inf
                 # B[ilast,ilast] is 0; clear H[ilast,ilast-1] to split
-                G,r = givens(conj(H[ilast,ilast]),conj(H[ilast,ilast-1]),ilast,ilast-1)
-                H[ilast,ilast] = r'
-                H[ilast,ilast-1] = 0
-                rmul!(view(H,ifirstm:ilast-1,:),G')
-                rmul!(view(B,ifirstm:ilast-1,:),G')
+                G, r = givens(conj(H[ilast, ilast]), conj(H[ilast, ilast - 1]), ilast, ilast - 1)
+                H[ilast, ilast] = r'
+                H[ilast, ilast - 1] = 0
+                rmul!(view(H, ifirstm:(ilast - 1), :), G')
+                rmul!(view(B, ifirstm:(ilast - 1), :), G')
                 if wantZ
-                    rmul!(Z,G')
+                    rmul!(Z, G')
                 end
                 br = _deflatec_normal
             end
         end # if trivial split
         if br == _deflatec_normal
             # H[ilast, ilast-1] == 0: standardize B, set α,β
-            absb = abs(B[ilast,ilast])
+            absb = abs(B[ilast, ilast])
             @mydebug println("deflating $ilast, |B_tail|=$absb")
             if absb > safmin
-                signbc = conj(B[ilast,ilast] / absb)
-                B[ilast,ilast] = absb
+                signbc = conj(B[ilast, ilast] / absb)
+                B[ilast, ilast] = absb
                 if wantSchur
-                    B[ifirstm:ilast-1,ilast] .*= signbc
-                    H[ifirstm:ilast,ilast] .*= signbc
+                    B[ifirstm:(ilast - 1), ilast] .*= signbc
+                    H[ifirstm:ilast, ilast] .*= signbc
                 else
-                    H[ilast,ilast] *= signbc
+                    H[ilast, ilast] *= signbc
                 end
                 if wantZ
-                    Z[:,ilast] .*= signbc
+                    Z[:, ilast] .*= signbc
                 end
             else
-                B[ilast,ilast] = 0
+                B[ilast, ilast] = 0
             end
-            α[ilast] = H[ilast,ilast]
-            β[ilast] = B[ilast,ilast]
+            α[ilast] = H[ilast, ilast]
+            β[ilast] = B[ilast, ilast]
             ilast -= 1
             if ilast < ilo
                 # we are done; exit outer loop
@@ -353,18 +369,18 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         shiftcount += 1
         # At this point ifirst < ilast and diagonal elts of B in that block
         # are all nontrivial.
-        if shiftcount % 10 !=  0
+        if shiftcount % 10 != 0
             # Wilkinson shift, i.e. eigenvalue of last 2x2 block of
             # A B⁻¹ nearest to last elt
 
             # factor B as U D where U has unit diagonal, compute A D⁻¹ U⁻¹
-            b11 = (bscale * B[ilast-1,ilast-1])
-            b22 = (bscale * B[ilast,ilast])
-            u12 = (bscale * B[ilast-1,ilast]) / b22
-            ad11 = (ascale * H[ilast-1,ilast-1]) / b11
-            ad21 = (ascale * H[ilast,ilast-1]) / b11
-            ad12 = (ascale * H[ilast-1,ilast]) / b22
-            ad22 = (ascale * H[ilast,ilast]) / b22
+            b11 = (bscale * B[ilast - 1, ilast - 1])
+            b22 = (bscale * B[ilast, ilast])
+            u12 = (bscale * B[ilast - 1, ilast]) / b22
+            ad11 = (ascale * H[ilast - 1, ilast - 1]) / b11
+            ad21 = (ascale * H[ilast, ilast - 1]) / b11
+            ad12 = (ascale * H[ilast - 1, ilast]) / b22
+            ad22 = (ascale * H[ilast, ilast]) / b22
             abi22 = ad22 - u12 * ad21
             abi12 = ad12 - u12 * ad11
             shift = abi22
@@ -383,10 +399,10 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         else
             # exceptional shifts
             # "Chosen for no particularly good reason" (LAPACK)
-            if shiftcount % 20 ==  0 && bscale * abs1(B[ilast, ilast]) > safmin
+            if shiftcount % 20 == 0 && bscale * abs1(B[ilast, ilast]) > safmin
                 eshift += (ascale * H[ilast, ilast]) / (bscale * B[ilast, ilast])
             else
-                eshift += (ascale * H[ilast, ilast-1]) / (bscale * B[ilast-1, ilast-1])
+                eshift += (ascale * H[ilast, ilast - 1]) / (bscale * B[ilast - 1, ilast - 1])
             end
             shift = eshift
         end
@@ -395,51 +411,53 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
         # check for two consecutive small subdiagonals
         local f1, _istart
         gotit = false
-        for j=ilast-1:-1:ifirst+1
+        for j in (ilast - 1):-1:(ifirst + 1)
             _istart = j
-            f1 = ascale * H[j,j] - shift * (bscale * B[j,j])
+            f1 = ascale * H[j, j] - shift * (bscale * B[j, j])
             t1 = abs1(f1)
-            t2 = ascale * abs1(H[j+1,j])
-            tr = max(t1,t2)
+            t2 = ascale * abs1(H[j + 1, j])
+            tr = max(t1, t2)
             if tr < one(RT) && tr != zero(RT)
                 t1 /= tr
                 t2 /= tr
             end
-            if abs1(H[j,j-1]) * t2 <= t1 * atol
+            if abs1(H[j, j - 1]) * t2 <= t1 * atol
                 gotit = true
                 break
             end
         end
         if !gotit
             _istart = ifirst
-            f1 = (ascale * H[ifirst, ifirst]
-                  - shift * (bscale * B[ifirst, ifirst]))
+            f1 = (
+                ascale * H[ifirst, ifirst]
+                    - shift * (bscale * B[ifirst, ifirst])
+            )
         end
 
         # qz sweep
         @mydebug println("QZ sweep range $(_istart):$ilast shift=$shift")
         # initial contribution to Q
-        g2 = ascale*H[_istart+1, _istart]
-        c,s,_ = givensAlgorithm(f1, g2)
+        g2 = ascale * H[_istart + 1, _istart]
+        c, s, _ = givensAlgorithm(f1, g2)
 
-        for j=_istart:ilast-1
+        for j in _istart:(ilast - 1)
             if j > _istart
-                    c,s,r = givensAlgorithm(H[j,j-1], H[j+1,j-1])
-                    H[j,j-1] = r
-                    H[j+1,j-1] = 0
+                c, s, r = givensAlgorithm(H[j, j - 1], H[j + 1, j - 1])
+                H[j, j - 1] = r
+                H[j + 1, j - 1] = 0
             end
-            G = Givens(j,j+1,T(c),s)
-            lmul!(G, view(H,:,j:ilastm))
-            lmul!(G, view(B,:,j:ilastm))
+            G = Givens(j, j + 1, T(c), s)
+            lmul!(G, view(H, :, j:ilastm))
+            lmul!(G, view(B, :, j:ilastm))
             if wantQ
                 rmul!(Q, G')
             end
-            c,s,r = givensAlgorithm(B[j+1,j+1], B[j+1,j])
-            B[j+1,j+1] = r
-            B[j+1,j] = 0
-            G = Givens(j,j+1,T(c),s)
-            rmul!(view(H,ifirstm:min(j+2,ilast),:),G)
-            rmul!(view(B,ifirstm:j,:),G)
+            c, s, r = givensAlgorithm(B[j + 1, j + 1], B[j + 1, j])
+            B[j + 1, j + 1] = r
+            B[j + 1, j] = 0
+            G = Givens(j, j + 1, T(c), s)
+            rmul!(view(H, ifirstm:min(j + 2, ilast), :), G)
+            rmul!(view(B, ifirstm:j, :), G)
             if wantZ
                 rmul!(Z, G)
             end
@@ -448,9 +466,9 @@ function _gqz!(H::StridedMatrix{T}, B::StridedMatrix{T}, Q, Z, wantSchur;
     @mydebug println("ggschur! done in $niter iters")
 
     # set eigenvalues for trivial leading part
-    for j in 1:ilo-1
-        α[j] = H[j,j]
-        β[j] = B[j,j]
+    for j in 1:(ilo - 1)
+        α[j] = H[j, j]
+        β[j] = B[j, j]
     end
 
     return α, β, H, B, Q, Z
@@ -461,24 +479,24 @@ end
 
 rescale the fields of `S` so that `S.β` and the diagonal of `S.T` are real.
 """
-function _canonicalize!(S::GeneralizedSchur{Ty}) where Ty
-    n = size(S.S,1)
+function _canonicalize!(S::GeneralizedSchur{Ty}) where {Ty}
+    n = size(S.S, 1)
     sf = safemin(real(Ty))
-    for k=1:n
-        scale = abs(S.T[k,k])
+    for k in 1:n
+        scale = abs(S.T[k, k])
         if scale > sf
-            t1 = conj(S.T[k,k] / scale)
-            t2 = S.T[k,k] / scale
-            S.T[k,k+1:n] .*= t1
-            S.S[k,k:n] .*= t1
+            t1 = conj(S.T[k, k] / scale)
+            t2 = S.T[k, k] / scale
+            S.T[k, (k + 1):n] .*= t1
+            S.S[k, k:n] .*= t1
             if !(S.Q === nothing) && !isempty(S.Q)
-                S.Q[:,k] .*= t2
+                S.Q[:, k] .*= t2
             end
         else
-            S.T[k,k] = zero(Ty)
+            S.T[k, k] = zero(Ty)
         end
-        S.α[k] = S.S[k,k]
-        S.β[k] = S.T[k,k]
+        S.α[k] = S.S[k, k]
+        S.β[k] = S.T[k, k]
     end
-    S
+    return S
 end

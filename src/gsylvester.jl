@@ -20,20 +20,31 @@ given upper triangular and square `A,B,D` and `E`.
 Overwrites `C` and `F`
 with `R` and `L`, and sets `σ` to avoid overflow.
 """
-function trsylvester!(A::StridedMatrix{T},B::StridedMatrix{T},
-                      C::StridedVecOrMat{T},
-                      D::StridedMatrix{T},E::StridedMatrix{T},
-                      F::StridedVecOrMat{T}) where {T}
+function trsylvester!(
+        A::StridedMatrix{T}, B::StridedMatrix{T},
+        C::StridedVecOrMat{T},
+        D::StridedMatrix{T}, E::StridedMatrix{T},
+        F::StridedVecOrMat{T}
+    ) where {T}
     m = checksquare(A)
     n = checksquare(B)
-    ((size(C,1) == m) && (size(C,2) == n)) || throw(DimensionMismatch(
-        "dimensions of C $(size(C)) must match A, ($m,$m), and B, ($n,$n)"))
+    ((size(C, 1) == m) && (size(C, 2) == n)) || throw(
+        DimensionMismatch(
+            "dimensions of C $(size(C)) must match A, ($m,$m), and B, ($n,$n)"
+        )
+    )
     m1 = checksquare(D)
     n1 = checksquare(E)
-    (m1 == m && n1 == n) || throw(DimensionMismatch(
-        "dimensions of D and E must match A and B"))
-    ((size(F,1) == m) && (size(F,2) == n)) || throw(DimensionMismatch(
-        "dimensions of F $(size(F)) must match A, ($m,$m), and B, ($n,$n)"))
+    (m1 == m && n1 == n) || throw(
+        DimensionMismatch(
+            "dimensions of D and E must match A and B"
+        )
+    )
+    ((size(F, 1) == m) && (size(F, 2) == n)) || throw(
+        DimensionMismatch(
+            "dimensions of F $(size(F)) must match A, ($m,$m), and B, ($n,$n)"
+        )
+    )
 
     rtyone = one(real(T))
     rtyzero = zero(real(T))
@@ -56,14 +67,14 @@ function trsylvester!(A::StridedMatrix{T},B::StridedMatrix{T},
     #   zero out C,F
     #   call solver w/ ifunc
     #   if solving, restore C,F
-    for j=1:n
-        for i=m:-1:1
+    for j in 1:n
+        for i in m:-1:1
             # build 2x2 problem
-            Z = [A[i,i] -B[j,j]; D[i,i] -E[j,j]]
-            rhs = [C[i,j]; F[i,j]]
+            Z = [A[i, i] -B[j, j]; D[i, i] -E[j, j]]
+            rhs = [C[i, j]; F[i, j]]
             x, unperturbed, scl = _safe_lu_solve!(Z, rhs)
-            C[i,j] = x[1]
-            F[i,j] = x[2]
+            C[i, j] = x[1]
+            F[i, j] = x[2]
             if scl != 1
                 lmul!(view(C, 1:m, k), scl)
                 lmul!(view(F, 1:m, k), scl)
@@ -71,13 +82,13 @@ function trsylvester!(A::StridedMatrix{T},B::StridedMatrix{T},
             # substitute R[i,j], L[i,j] into remaining eq
             if i > 1
                 α = -x[1]
-                C[1:i-1,j] .+= α * A[1:i-1,i]
-                F[1:i-1,j] .+= α * D[1:i-1,i]
+                C[1:(i - 1), j] .+= α * A[1:(i - 1), i]
+                F[1:(i - 1), j] .+= α * D[1:(i - 1), i]
             end
             if j < n
                 α = x[2]
-                C[i,j+1:n] .+= α * B[j,j+1:n]
-                F[i,j+1:n] .+= α * E[j,j+1:n]
+                C[i, (j + 1):n] .+= α * B[j, (j + 1):n]
+                F[i, (j + 1):n] .+= α * E[j, (j + 1):n]
             end
         end
     end
@@ -92,41 +103,52 @@ solve a generalized adjoint Sylvester equation ``Aᴴ X + Dᴴ Y = σ C``,
 for upper triangular `A, B, D,` and `E`, overwriting `C` and `F`
 and setting `σ` to avoid overflow.
 """
-function adjtrsylvester!(A::StridedMatrix{T},B::StridedMatrix{T},
-                      C::StridedVecOrMat{T},
-                      D::StridedMatrix{T},E::StridedMatrix{T},
-                      F::StridedVecOrMat{T}) where {T}
+function adjtrsylvester!(
+        A::StridedMatrix{T}, B::StridedMatrix{T},
+        C::StridedVecOrMat{T},
+        D::StridedMatrix{T}, E::StridedMatrix{T},
+        F::StridedVecOrMat{T}
+    ) where {T}
     m = checksquare(A)
     n = checksquare(B)
-    ((size(C,1) == m) && (size(C,2) == n)) || throw(DimensionMismatch(
-        "dimensions of C $(size(C)) must match A, ($m,$m), and B, ($n,$n)"))
+    ((size(C, 1) == m) && (size(C, 2) == n)) || throw(
+        DimensionMismatch(
+            "dimensions of C $(size(C)) must match A, ($m,$m), and B, ($n,$n)"
+        )
+    )
     m1 = checksquare(D)
     n1 = checksquare(E)
-    (m1 == m && n1 == n) || throw(DimensionMismatch(
-        "dimensions of D and E must match A and B"))
-    ((size(F,1) == m) && (size(F,2) == n)) || throw(DimensionMismatch(
-        "dimensions of F $(size(F)) must match A, ($m,$m), and B, ($n,$n)"))
+    (m1 == m && n1 == n) || throw(
+        DimensionMismatch(
+            "dimensions of D and E must match A and B"
+        )
+    )
+    ((size(F, 1) == m) && (size(F, 2) == n)) || throw(
+        DimensionMismatch(
+            "dimensions of F $(size(F)) must match A, ($m,$m), and B, ($n,$n)"
+        )
+    )
 
     scale = one(real(T))
     scaloc = one(real(T))
     dif = zero(real(T))
     cone = one(T)
-    for i=1:m
-        for j=n:-1:1
+    for i in 1:m
+        for j in n:-1:1
             # build 2x2 problem
-            Z = [A[i,i]' D[i,i]'; -B[j,j]' -E[j,j]']
-            rhs = [C[i,j]; F[i,j]]
+            Z = [A[i, i]' D[i, i]'; -B[j, j]' -E[j, j]']
+            rhs = [C[i, j]; F[i, j]]
             # FIXME: use safe version and update scale
             fZ = lu(Z)
             x = fZ \ rhs
-            C[i,j] = x[1]
-            F[i,j] = x[2]
+            C[i, j] = x[1]
+            F[i, j] = x[2]
             # substitute R[i,j], L[i,j] into remaining eq
-            for jj=1:j-1
-                F[i,jj] += x[1] * B[jj,j]' + x[2] * E[jj,j]'
+            for jj in 1:(j - 1)
+                F[i, jj] += x[1] * B[jj, j]' + x[2] * E[jj, j]'
             end
-            for ii=i+1:m
-                C[ii,j] -= x[1] * A[i,ii]' + x[2] * D[i,ii]'
+            for ii in (i + 1):m
+                C[ii, j] -= x[1] * A[i, ii]' + x[2] * D[i, ii]'
             end
         end
     end

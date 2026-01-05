@@ -3,17 +3,19 @@
 using LinearAlgebra: DivideAndConquer
 
 # based on LAPACK xSTEDC
-function _gschur!(A::SymTridiagonal{T},
-                  alg::DivideAndConquer,
-                  Z::Union{Nothing, AbstractArray} = nothing;
-                  maxiter=30*size(A,1), nqrmax=25) where {T}
-    n = size(A,1)
+function _gschur!(
+        A::SymTridiagonal{T},
+        alg::DivideAndConquer,
+        Z::Union{Nothing, AbstractArray} = nothing;
+        maxiter = 30 * size(A, 1), nqrmax = 25
+    ) where {T}
+    n = size(A, 1)
     if n == 0
         return A
     end
     if n == 1
         if Z !== nothing
-            Z[1,1] = one(T)
+            Z[1, 1] = one(T)
         end
         return
     end
@@ -24,14 +26,14 @@ function _gschur!(A::SymTridiagonal{T},
     d = A.dv
     e = A.ev
     n = length(d)
-    wantZ = (Z !== nothing) && (size(Z,1) > 0)
+    wantZ = (Z !== nothing) && (size(Z, 1) > 0)
     if wantZ
-        nz = size(Z,2)
+        nz = size(Z, 2)
         (nz == n) || throw(DimensionMismatch("second dimension of Z must match tridiagonal A"))
     end
 
     epsT = eps(T)
-    if n <= small_size
+    return if n <= small_size
         @mydebug println("QR for full problem")
         _gschur!(A, QRIteration(), Z)
     else
@@ -53,15 +55,15 @@ function _gschur!(A::SymTridiagonal{T},
                 continue
             end
             dvw = view(d, istart:ifinish)
-            evw = view(e, istart:ifinish-1)
+            evw = view(e, istart:(ifinish - 1))
             if m > small_size
                 # scale
-                t1,_ = findmax(abs, dvw)
-                t2,_ = findmax(abs, evw)
-                orgnrm = max(t1,t2)
-                dvw .*= (1/orgnrm)
-                evw .*= (1/orgnrm)
-                Zwrk = similar(Z,m,m)
+                t1, _ = findmax(abs, dvw)
+                t2, _ = findmax(abs, evw)
+                orgnrm = max(t1, t2)
+                dvw .*= (1 / orgnrm)
+                evw .*= (1 / orgnrm)
+                Zwrk = similar(Z, m, m)
                 Zwrk .= I(m)
                 _dcschur_core!(dvw, evw, Zwrk, m, nqrmax)
                 if wantZ
@@ -77,7 +79,7 @@ function _gschur!(A::SymTridiagonal{T},
                 # CHECKME: do we have the same constraint on column(?) dim as STEQR?
                 #          otherwise maybe pass Z or a view directly
                 if wantZ
-                    Zwrk = similar(Z,m,m)
+                    Zwrk = similar(Z, m, m)
                     Zwrk .= I(m)
                 else
                     Zwrk = nothing
@@ -105,48 +107,48 @@ function _dcschur_core!(d, e, Z, n, nqrmax)
     itree = [n] # IWORK[1...]
     tlevels = 0 # TLVLS
     while itree[nsubprobs] > nqrmax
-        resize!(itree, 2*nsubprobs)
+        resize!(itree, 2 * nsubprobs)
         for j in nsubprobs:-1:1
-            itree[2*j] = itree[j] >> 1
-            itree[2*j-1] = (itree[j] + 1) >> 1
+            itree[2 * j] = itree[j] >> 1
+            itree[2 * j - 1] = (itree[j] + 1) >> 1
         end
         tlevels += 1
         nsubprobs *= 2
     end
     @mydebug println("nsubprobs = $nsubprobs itree = $itree")
     for j in 2:nsubprobs
-        itree[j] = itree[j] + itree[j-1]
+        itree[j] = itree[j] + itree[j - 1]
     end
 
     # do the rank-1 cuts to separate the leaves
-    for i in 1:nsubprobs-1
+    for i in 1:(nsubprobs - 1)
         i1 = itree[i] + 1
         i2 = i1 - 1
         d[i2] -= abs(e[i2])
         d[i1] -= abs(e[i2])
     end
 
-    indexq = zeros(Int,n)
-    for i in 0:nsubprobs-1
+    indexq = zeros(Int, n)
+    for i in 0:(nsubprobs - 1)
         if i == 0
             submat = 1
             matsize = itree[1]
         else
             submat = itree[i] + 1
-            matsize = itree[i+1] - itree[i]
+            matsize = itree[i + 1] - itree[i]
         end
         Qwrk = similar(Z, matsize, matsize)
         Qwrk .= I(matsize)
         iend = submat + matsize - 1
         @mydebug println("QR for subproblem $submat:$iend")
         dvw = view(d, submat:iend)
-        evw = view(e, submat:iend-1)
+        evw = view(e, submat:(iend - 1))
         _gschur!(SymTridiagonal(dvw, evw), QRIteration(), Qwrk)
         iend = submat + matsize - 1
-        copy!(view(Z,submat:iend,submat:iend), Qwrk)
+        copy!(view(Z, submat:iend, submat:iend), Qwrk)
         # mul!(view(Qstore,1:qsiz,submat:iend), view(Z,1:qsiz,submat:iend), Qwrk)
         k = 1
-        for j in submat:itree[i+1]
+        for j in submat:itree[i + 1]
             indexq[j] = k
             k += 1
         end
@@ -155,7 +157,7 @@ function _dcschur_core!(d, e, Z, n, nqrmax)
     # successively merge up the tree
     curlevel = 1
     while nsubprobs > 1
-        for i in 0:2:nsubprobs-2
+        for i in 0:2:(nsubprobs - 2)
             if i == 0
                 submat = 1
                 matsize = itree[2]
@@ -163,7 +165,7 @@ function _dcschur_core!(d, e, Z, n, nqrmax)
                 # curprob = 0
             else
                 submat = itree[i] + 1
-                matsize = itree[i+2] - itree[i]
+                matsize = itree[i + 2] - itree[i]
                 # claim integer division rounds up in Fortran
                 msd2 = (matsize + 1) >> 1
                 # curprob += 1
@@ -178,11 +180,12 @@ function _dcschur_core!(d, e, Z, n, nqrmax)
             if !ok
                 throw(UnconvergedException("unable to solve secular equation accurately"))
             end
-            itree[i >> 1 + 1] = itree[i+2]
+            itree[i >> 1 + 1] = itree[i + 2]
         end
         nsubprobs = nsubprobs >> 1
         curlevel += 1
     end
+    return
 end
 
 # based on DLAED1
@@ -190,7 +193,7 @@ end
 merge lower order eigensystems (`1:ncut` and `ncut+1:n)`
 """
 function _dcmerge!(d, Q, indexq, ρ, ncut)
-    n = size(d,1)
+    n = size(d, 1)
     # last row of Q₁ and first row of Q₂
     zpp1 = ncut + 1
     z = vcat(view(Q, ncut:ncut, 1:ncut)', view(Q, zpp1:zpp1, zpp1:n)')
@@ -198,7 +201,7 @@ function _dcmerge!(d, Q, indexq, ρ, ncut)
     if k != 0
         @mydebug println("after deflation k = $k colcounts = $(colcounts[1:4]) pairs $(colcounts[5])")
         # solve secular equation and update eigensystem
-        ok = _dcsecular!(k, ncut, d, Q, ρmod, λ, Q2, indexc, colcounts,w)
+        ok = _dcsecular!(k, ncut, d, Q, ρmod, λ, Q2, indexc, colcounts, w)
         sortperm!(indexq, d)
         return ok
     else
@@ -211,7 +214,7 @@ end
 # mutates d, Q, indexq,
 # based on DLAED2
 function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
-    n = size(d,1)
+    n = size(d, 1)
     n2 = n - n1
     n1p1 = n1 + 1
 
@@ -223,7 +226,7 @@ function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
     end
     ρ = abs(2 * ρ)
     indexq[n1p1:n] .+= n1
-    w = zeros(T,n)
+    w = zeros(T, n)
 
     # re-integrate the deflated parts from last pass
     λ = d[indexq]
@@ -241,12 +244,12 @@ function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
         k = 0
         for j in 1:n
             i = index[j]
-            copy!(view(Qtmp,1:n,j), view(Q, 1:n, i))
+            copy!(view(Qtmp, 1:n, j), view(Q, 1:n, i))
             λ[j] = d[i]
         end
         copy!(Q, Qtmp)
         copy!(d, λ)
-        return k, w, ρ, λ, indexc, Int[], [similar(Q,0,0)]
+        return k, w, ρ, λ, indexc, Int[], [similar(Q, 0, 0)]
     end
 
     # coltype[j] indicates that column j is
@@ -323,17 +326,17 @@ function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
                     k2s = 0 # diagnostic only
                     if k2 + i > n
                         indexp[k2 + i - 1] = pj
-                        k2s = k2+i-1
+                        k2s = k2 + i - 1
                     else
                         while k2 + i <= n
-                            if d[pj] < d[indexp[k2+i]]
-                                indexp[k2+i-1] = indexp[k2+i]
-                                indexp[k2+i] = pj
-                                k2s = k2+i
+                            if d[pj] < d[indexp[k2 + i]]
+                                indexp[k2 + i - 1] = indexp[k2 + i]
+                                indexp[k2 + i] = pj
+                                k2s = k2 + i
                                 i += 1
                             else
                                 indexp[k2 + i - 1] = pj
-                                k2s = k2+i-1
+                                k2s = k2 + i - 1
                                 break
                             end
                         end
@@ -358,7 +361,7 @@ function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
     indexp[k] = pj
     colcounts = [count(x -> x == j, coltype) for j in 1:4]
     push!(colcounts, nclose)
-    psm = cumsum([1,colcounts[1:3]...])
+    psm = cumsum([1, colcounts[1:3]...])
     k = n - colcounts[4]
 
     # fill out indexc to sort by type
@@ -372,33 +375,35 @@ function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
 
     # sort eigenvalues and eigenvectors
     i = 1
-    Q2 = [similar(Q,n1,colcounts[1]), similar(Q,n1,colcounts[2]), similar(Q,n2,colcounts[2]),
-        similar(Q,n2,colcounts[3]), similar(Q,n,colcounts[4])]
+    Q2 = [
+        similar(Q, n1, colcounts[1]), similar(Q, n1, colcounts[2]), similar(Q, n2, colcounts[2]),
+        similar(Q, n2, colcounts[3]), similar(Q, n, colcounts[4]),
+    ]
     #  iq2 = n1*(c1+c2)
     for j in 1:colcounts[1]
         js = index[i]
-        copy!(view(Q2[1],:,j), view(Q,1:n1,js))
+        copy!(view(Q2[1], :, j), view(Q, 1:n1, js))
         z[i] = d[js]
         i += 1
     end
     # iq1 = n1*c1+1
     for j in 1:colcounts[2]
         js = index[i]
-        copy!(view(Q2[2],:,j), view(Q,1:n1,js))
-        copy!(view(Q2[3],:,j), view(Q,n1+1:n1+n2,js))
+        copy!(view(Q2[2], :, j), view(Q, 1:n1, js))
+        copy!(view(Q2[3], :, j), view(Q, (n1 + 1):(n1 + n2), js))
         z[i] = d[js]
         i += 1
     end
     # iq1 = n1*(c1+c2)
     for j in 1:colcounts[3]
         js = index[i]
-        copy!(view(Q2[4],:,j), view(Q,n1+1:n1+n2,js))
+        copy!(view(Q2[4], :, j), view(Q, (n1 + 1):(n1 + n2), js))
         z[i] = d[js]
         i += 1
     end
     for j in 1:colcounts[4]
         js = index[i]
-        copy!(view(Q2[5],:,j), view(Q,1:n,js))
+        copy!(view(Q2[5], :, j), view(Q, 1:n, js))
         z[i] = d[js]
         i += 1
     end
@@ -406,8 +411,8 @@ function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
     if k < n
         # put sorted, deflated eigenpairs in last n-k slots of Q and d
         for j in 1:colcounts[4]
-            copy!(view(Q,:,k+j), view(Q2[5],:,j))
-            d[k+j] = z[k+j]
+            copy!(view(Q, :, k + j), view(Q2[5], :, j))
+            d[k + j] = z[k + j]
         end
     end
     return k, w, ρ, λ, indexc, colcounts, Q2
@@ -418,49 +423,49 @@ end
 find roots of secular equation defined by `(d, w, ρ)`
 also update eigvals [1:k] in `d` and eigvecs in `Q`
 """
-function _dcsecular!(k, n1, d::AbstractVector{T}, Q, ρ, λ, Q2, indexc, colcounts, w,) where {T}
-    n = size(d,1)
+function _dcsecular!(k, n1, d::AbstractVector{T}, Q, ρ, λ, Q2, indexc, colcounts, w) where {T}
+    n = size(d, 1)
     # we assume IEEE765 so skip the missing guard digit patch
     if k == 0
         return true
     end
     for j in 1:k
         # stores eigvec info in column of Q
-        d[j], converged = _dcroot!(k, j, view(λ,1:k), view(w,1:k), view(Q,1:k,j), ρ)
+        d[j], converged = _dcroot!(k, j, view(λ, 1:k), view(w, 1:k), view(Q, 1:k, j), ρ)
         converged || return false
     end
-    s0 = similar(w,k)
+    s0 = similar(w, k)
     if k == 2
         for j in 1:k
-            w[1] = Q[1,j]
-            w[2] = Q[2,j]
-            Q[1,j] = w[indexc[1]]
-            Q[2,j] = w[indexc[2]]
+            w[1] = Q[1, j]
+            w[2] = Q[2, j]
+            Q[1, j] = w[indexc[1]]
+            Q[2, j] = w[indexc[2]]
         end
     elseif k > 1
-        copy!(view(s0,1:k,1), view(w,1:k))
+        copy!(view(s0, 1:k, 1), view(w, 1:k))
         for j in 1:k
-            w[j] = Q[j,j]
+            w[j] = Q[j, j]
         end
         for j in 1:k
-            for i in 1:j-1
-                w[i] = w[i] * (Q[i,j] / (λ[i] - λ[j]))
+            for i in 1:(j - 1)
+                w[i] = w[i] * (Q[i, j] / (λ[i] - λ[j]))
             end
-            for i in j+1:k
-                w[i] = w[i] * (Q[i,j] / (λ[i] - λ[j]))
+            for i in (j + 1):k
+                w[i] = w[i] * (Q[i, j] / (λ[i] - λ[j]))
             end
         end
         for i in 1:k
-            w[i] = sign( s0[i]) * sqrt(-w[i])
+            w[i] = sign(s0[i]) * sqrt(-w[i])
         end
         # compute eigenvectors of modified rank-1
         for j in 1:k
             for i in 1:k
-                s0[i] = w[i] / Q[i,j]
+                s0[i] = w[i] / Q[i, j]
             end
             t = norm(s0)
             for i in 1:k
-                Q[i,j] = s0[indexc[i]] / t
+                Q[i, j] = s0[indexc[i]] / t
             end
         end
     end
@@ -468,19 +473,19 @@ function _dcsecular!(k, n1, d::AbstractVector{T}, Q, ρ, λ, Q2, indexc, colcoun
     n2 = n - n1
     n12 = colcounts[1] + colcounts[2] # components in first part
     n23 = colcounts[2] + colcounts[3] # components in second part
-    S = copy(view(Q, colcounts[1]+1:colcounts[1]+n23, 1:k))
+    S = copy(view(Q, (colcounts[1] + 1):(colcounts[1] + n23), 1:k))
     if n23 > 0
-        mul!(view(Q, n1+1:n, 1:k), Q2[3], view(S, 1:colcounts[2], :))
-        mul!(view(Q, n1+1:n, 1:k), Q2[4], view(S, colcounts[2]+1:n23, :), true, true)
+        mul!(view(Q, (n1 + 1):n, 1:k), Q2[3], view(S, 1:colcounts[2], :))
+        mul!(view(Q, (n1 + 1):n, 1:k), Q2[4], view(S, (colcounts[2] + 1):n23, :), true, true)
     else
-        Q[n1+1:n, 1:k] .= 0
+        Q[(n1 + 1):n, 1:k] .= 0
     end
     S = copy(view(Q, 1:n12, 1:k))
     if n12 > 0
         mul!(view(Q, 1:n1, 1:k), Q2[1], view(S, 1:colcounts[1], :))
-        mul!(view(Q, 1:n1, 1:k), Q2[2], view(S, colcounts[1]+1:n12,:), true, true)
+        mul!(view(Q, 1:n1, 1:k), Q2[2], view(S, (colcounts[1] + 1):n12, :), true, true)
     else
-        Q[1:n1,1:k] .= 0
+        Q[1:n1, 1:k] .= 0
     end
     return true
 end
@@ -510,18 +515,18 @@ function _initialize_n(ii, midpt, d::AbstractVector{T}, z, δ, ρ) where {T}
     ρinv = 1 / ρ
     n = length(d)
     ψ = zero(T)
-    for j in 1:n-2
+    for j in 1:(n - 2)
         ψ += z[j]^2 / δ[j]
     end
     c = ρinv + ψ
     w = c + z[ii]^2 / δ[ii] + z[n]^2 / δ[n]
     if w <= 0
-        t = z[n-1]^2 / (d[n] - d[n-1] + ρ) + z[n]^2 / ρ
+        t = z[n - 1]^2 / (d[n] - d[n - 1] + ρ) + z[n]^2 / ρ
         if c <= t
             τ = ρ
         else
-            Δ = d[n] - d[n-1]
-            a = -c * Δ + z[n-1]^2 + z[n]^2
+            Δ = d[n] - d[n - 1]
+            a = -c * Δ + z[n - 1]^2 + z[n]^2
             b = z[n]^2 * Δ
             if a < 0
                 τ = 2 * b / (sqrt(a^2 + 4 * b * c) - a)
@@ -533,8 +538,8 @@ function _initialize_n(ii, midpt, d::AbstractVector{T}, z, δ, ρ) where {T}
         dltlb = midpt
         dltub = ρ
     else
-        Δ = d[n] - d[n-1]
-        a = -c * Δ + z[n-1]^2 + z[n]^2
+        Δ = d[n] - d[n - 1]
+        a = -c * Δ + z[n - 1]^2 + z[n]^2
         b = z[n]^2 * Δ
         if a < 0
             τ = 2 * b / (sqrt(a^2 + 4 * b * c) - a)
@@ -575,7 +580,7 @@ end
 function _next_step_n(w, τ, parts, d::AbstractVector{T}, z, δ, ρ, dltlb, dltub, iter) where {T}
     n = length(d)
     dψ, dϕ = parts.dψ, parts.dϕ
-    c = w - δ[n-1] * dψ - δ[n] * dϕ
+    c = w - δ[n - 1] * dψ - δ[n] * dϕ
     if iter <= 2
         # c < 0 would step below the lower bound.
         # Normally this would be caught by the logic below (falling back to Newton).
@@ -584,8 +589,8 @@ function _next_step_n(w, τ, parts, d::AbstractVector{T}, z, δ, ρ, dltlb, dltu
         # where Newton is excessively slow without it.
         c = abs(c)
     end
-    a = (δ[n-1] + δ[n]) * w - δ[n-1] * δ[n] * (dψ + dϕ)
-    b = δ[n-1] * δ[n] * w
+    a = (δ[n - 1] + δ[n]) * w - δ[n - 1] * δ[n] * (dψ + dϕ)
+    b = δ[n - 1] * δ[n] * w
     if c == 0
         η = dltub - τ
     elseif a >= 0
@@ -603,7 +608,7 @@ function _next_step_n(w, τ, parts, d::AbstractVector{T}, z, δ, ρ, dltlb, dltu
         if w < 0
             η = (dltub - τ) / 2
         else
-            η = (dltlb - τ) /2
+            η = (dltlb - τ) / 2
         end
     end
     return η
@@ -614,11 +619,11 @@ function _initialize(i, midpt, Δ, d::AbstractVector{T}, z, δ, ρinv) where {T}
     n = length(d)
     ip1 = i + 1
     ψ = zero(T)
-    for j in 1:i-1
+    for j in 1:(i - 1)
         ψ = ψ + z[j]^2 / δ[j]
     end
     ϕ = zero(T)
-    for j in n:-1:i+2
+    for j in n:-1:(i + 2)
         ϕ = ϕ + z[j]^2 / δ[j]
     end
     c = ρinv + ψ + ϕ
@@ -655,8 +660,8 @@ end
 function _update_w(ii, τ, ηq, d, z::AbstractVector{T}, δ, ρ) where {T}
     n = length(d)
     ρinv = 1 / ρ
-    iip1 = ii+1
-    iim1 = ii-1
+    iip1 = ii + 1
+    iim1 = ii - 1
     # evaluate ψ and derivative
     dψ = zero(T)
     ψ = zero(T)
@@ -683,7 +688,7 @@ function _update_w(ii, τ, ηq, d, z::AbstractVector{T}, δ, ρ) where {T}
     t = z[ii] * t
     w = ρinv + ϕ + ψ + t
     erretm = 8 * (ϕ - ψ) + erretm + 2 * ρinv + 3 * abs(t) + abs(τ + ηq) * dw
-    parts = (;ψ, ϕ, dψ, dϕ, dw)
+    parts = (; ψ, ϕ, dψ, dϕ, dw)
     return w, erretm, parts, w0
 end
 
@@ -693,8 +698,8 @@ function _next_step(i, ii, niter, w, τ, parts, switch3, origin_at_i, switch, d,
     ψ, ϕ = parts.ψ, parts.ϕ
     dw = parts.dw
     ip1 = i + 1
-    iip1 = ii+1
-    iim1 = ii-1
+    iip1 = ii + 1
+    iim1 = ii - 1
     zz = similar(d, 3)
     if !switch3
         if !switch
@@ -724,9 +729,9 @@ function _next_step(i, ii, niter, w, τ, parts, switch3, origin_at_i, switch, d,
             end
             η = b / a
         elseif a <= 0
-            η = (a - sqrt(abs(a^2 - 4*b*c))) / (2 * c)
+            η = (a - sqrt(abs(a^2 - 4 * b * c))) / (2 * c)
         else
-            η = 2 * b / (a + sqrt(abs(a^2 - 4*b*c)))
+            η = 2 * b / (a + sqrt(abs(a^2 - 4 * b * c)))
         end
     else
         # interpolation using 3 most relevant poles
@@ -743,7 +748,7 @@ function _next_step(i, ii, niter, w, τ, parts, switch3, origin_at_i, switch, d,
             zz[3] = z[iip1]^2
         end
         zz[2] = z[ii]^2
-        η, converged = _dcnewton(niter, origin_at_i, c, view(δ,iim1:iip1), zz, w)
+        η, converged = _dcnewton(niter, origin_at_i, c, view(δ, iim1:iip1), zz, w)
     end
     if w * η > 0
         # fall back to Newton if misled by roundoff
@@ -764,14 +769,14 @@ end
 # based on DLAED4
 # reference: R-C. Li, LAWN89 (1993)
 # stores eigvec info in δ, returns eigval and convergence flag
-function _dcroot!(n,i,d,z,δ,ρ)
+function _dcroot!(n, i, d, z, δ, ρ)
     maxit = 30
     if n == 1
         λ = d[1] + ρ * z[1]^2
         δ[1] = 1
         return λ, true
     elseif n == 2
-        λ = _dcroot2!(i,d,z,δ,ρ)
+        λ = _dcroot2!(i, d, z, δ, ρ)
         return λ, true
     end
     T = eltype(d)
@@ -781,7 +786,7 @@ function _dcroot!(n,i,d,z,δ,ρ)
 
 
     if i == n
-        ii = n-1
+        ii = n - 1
         niter = 1
         midpt = ρ / 2
         δ .= (d .- d[i]) .- midpt
@@ -833,13 +838,13 @@ function _dcroot!(n,i,d,z,δ,ρ)
     else
         # i ∈ [3..n-1]
         niter = 1
-        ip1 = i+1
+        ip1 = i + 1
         # initial guess
         Δ = d[ip1] - d[i]
         midpt = Δ / 2
         δ .= (d .- d[i]) .- midpt
         w, τ, dltlb, dltub, origin_at_i = _initialize(i, midpt, Δ, d, z, δ, ρinv)
-        ii = origin_at_i ? i : i+1
+        ii = origin_at_i ? i : i + 1
         dorg = d[ii]
         δ .= (d .- dorg) .- τ
         w, erretm, parts, w0 = _update_w(ii, τ, zero(T), d, z, δ, ρ)
@@ -916,7 +921,7 @@ end
 
 # root of secular equation for n=2
 # based on DLAED5
-function _dcroot2!(i,d::AbstractVector{T},z,δ,ρ) where {T}
+function _dcroot2!(i, d::AbstractVector{T}, z, δ, ρ) where {T}
     Δ = d[2] - d[1]
     if i == 1
         w = one(T) + 2 * ρ * (z[2]^2 - z[1]^2) / Δ
@@ -928,7 +933,7 @@ function _dcroot2!(i,d::AbstractVector{T},z,δ,ρ) where {T}
             δ[1] = -z[1] / τ
             δ[2] = z[2] / (Δ - τ)
         else
-            b = -Δ  + ρ * (z[1]^2 + z[2]^2)
+            b = -Δ + ρ * (z[1]^2 + z[2]^2)
             c = ρ * z[2]^2 * Δ
             if b > 0
                 τ = -2 * c / (b + sqrt(b^2 + 4 * c))
@@ -947,7 +952,7 @@ function _dcroot2!(i,d::AbstractVector{T},z,δ,ρ) where {T}
         b = -Δ + ρ * (z[1]^2 + z[2]^2)
         c = ρ * z[2]^2 * Δ
         if b > 0
-            τ = (b + sqrt(b^2 + 4*c)) / 2
+            τ = (b + sqrt(b^2 + 4 * c)) / 2
         else
             τ = 2 * c / (-b + sqrt(b^2 + 4 * c))
         end
@@ -996,7 +1001,7 @@ function _dcnewton(kniter, origin_at_i, ρ, d::AbstractVector{T}, z, f_init) whe
         b /= t
         c /= t
         if c == 0
-            τ = b/a
+            τ = b / a
         elseif a < 0
             τ = (a - sqrt(abs(a^2 - 4 * b * c)))
         else
@@ -1008,10 +1013,11 @@ function _dcnewton(kniter, origin_at_i, ρ, d::AbstractVector{T}, z, f_init) whe
         if d[1] == τ || d[2] == τ || d[3] == τ
             τ = zero(T)
         else
-            t = (f_init
-                 + τ * z[1] / (d[1] * (d[1] - τ))
-                 + τ * z[2] / (d[2] * (d[2] - τ))
-                 + τ * z[3] / (d[3] * (d[3] - τ))
+            t = (
+                f_init
+                    + τ * z[1] / (d[1] * (d[1] - τ))
+                    + τ * z[2] / (d[2] * (d[2] - τ))
+                    + τ * z[3] / (d[3] * (d[3] - τ))
             )
             if t <= 0
                 lbd = τ
