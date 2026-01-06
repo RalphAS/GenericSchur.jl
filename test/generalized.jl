@@ -1,6 +1,8 @@
-function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
-                   normal=false, commuting=false) where {T<:Complex}
-    n = size(A,1)
+function gschurtest(
+        A::Matrix{T}, B::Matrix{T}, tol;
+        normal = false, commuting = false
+    ) where {T <: Complex}
+    n = size(A, 1)
     ulp = eps(real(T))
     if real(T) <: BlasFloat
         S = GenericSchur.ggschur!(copy(A), copy(B))
@@ -8,8 +10,8 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
         S = schur(A, B)
     end
     # test 1: S.T is upper triangular
-    @test norm(tril(S.S,-1)) / (n * norm(A) * ulp) < tol
-    @test norm(tril(S.T,-1)) / (n * norm(A) * ulp) < tol
+    @test norm(tril(S.S, -1)) / (n * norm(A) * ulp) < tol
+    @test norm(tril(S.T, -1)) / (n * norm(A) * ulp) < tol
     # @test all(tril(S.S,-1) .== 0)
     # @test all(tril(S.T,-1) .== 0)
     # test 2: norm(A - S.Q * S.T * S.Z') / (n * norm(A) * ulp) < tol
@@ -19,7 +21,7 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
     @test norm(I - S.Z * S.Z') / (n * ulp) < tol
     @test norm(I - S.Q * S.Q') / (n * ulp) < tol
     # test 4: S.values are e.v. of T
-#    @test all(csort(S.values) .== csort(diag(S.T)))
+    #    @test all(csort(S.values) .== csort(diag(S.T)))
 
     # It is tempting to check eigenvalues against LAPACK eigvals(A)
     # for suitable types, but the comparison is misleading without
@@ -28,21 +30,23 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
 
     if normal && commuting
         # verify that Schur diagonalizes normal commuting matrices
-        @test norm(triu(S.S,1)) / (n * norm(B) * ulp) < tol
-        @test norm(triu(S.T,1)) / (n * norm(A) * ulp) < tol
+        @test norm(triu(S.S, 1)) / (n * norm(B) * ulp) < tol
+        @test norm(triu(S.T, 1)) / (n * norm(A) * ulp) < tol
     end
 
     VR = eigvecs(S)
     evcheck = norm((A * VR) * diagm(0 => S.β) - (B * VR) * diagm(0 => S.α))
-    @test evcheck / (n*norm(A) * ulp) < tol
-    VL = eigvecs(S, left=true)
+    @test evcheck / (n * norm(A) * ulp) < tol
+    VL = eigvecs(S, left = true)
     evcheck = norm((A' * VL) * diagm(0 => conj.(S.β)) - (B' * VL) * diagm(0 => conj.(S.α)))
-    @test evcheck / (n*norm(A) * ulp) < tol
+    return @test evcheck / (n * norm(A) * ulp) < tol
 end
 
-function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
-                   normal=false, commuting=false) where {T<:Real}
-    n = size(A,1)
+function gschurtest(
+        A::Matrix{T}, B::Matrix{T}, tol;
+        normal = false, commuting = false
+    ) where {T <: Real}
+    n = size(A, 1)
     ulp = eps(real(T))
     if real(T) <: BlasFloat
         S = GenericSchur.ggschur!(copy(A), copy(B))
@@ -50,8 +54,8 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
         S = schur(A, B)
     end
     # test 1: S.S is quasi-triangular and S.T is upper triangular
-    @test norm(tril(S.S,-2)) / (n * norm(A) * ulp) < tol
-    @test norm(tril(S.T,-1)) / (n * norm(A) * ulp) < tol
+    @test norm(tril(S.S, -2)) / (n * norm(A) * ulp) < tol
+    @test norm(tril(S.T, -1)) / (n * norm(A) * ulp) < tol
     # @test all(tril(S.S,-2) .== 0)
     # @test all(tril(S.T,-1) .== 0)
     # test 2: factorization residuals are small
@@ -63,28 +67,30 @@ function gschurtest(A::Matrix{T}, B::Matrix{T}, tol;
 
     VR = eigvecs(S)
     evcheck = norm((A * VR) * diagm(0 => S.β) - (B * VR) * diagm(0 => S.α))
-    @test evcheck / (n*norm(A) * ulp) < tol
-    VL = eigvecs(S, left=true)
-    evcheck = norm(diagm(0 => S.β) * (VL' * A)  - diagm(0 => S.α) * (VL' * B))
-    @test evcheck / (n*norm(A) * ulp) < tol
+    @test evcheck / (n * norm(A) * ulp) < tol
+    VL = eigvecs(S, left = true)
+    evcheck = norm(diagm(0 => S.β) * (VL' * A) - diagm(0 => S.α) * (VL' * B))
+    return @test evcheck / (n * norm(A) * ulp) < tol
 end
 
-@testset "generalized basic sanity $T" for T in [ComplexF64,
-    Complex{BigFloat}, Float64, BigFloat]
+@testset "generalized basic sanity $T" for T in [
+        ComplexF64,
+        Complex{BigFloat}, Float64, BigFloat,
+    ]
 
-unfl = floatmin(real(T))
-ovfl = one(real(T)) / unfl
-ulp = eps(real(T))
-ulpinv = one(real(T)) / ulp
-rtulp = sqrt(ulp)
-rtulpi = one(real(T)) / rtulp
+    unfl = floatmin(real(T))
+    ovfl = one(real(T)) / unfl
+    ulp = eps(real(T))
+    ulpinv = one(real(T)) / ulp
+    rtulp = sqrt(ulp)
+    rtulpi = one(real(T)) / rtulp
 
-# sizes of matrices to test
-ens = [4,32]
+    # sizes of matrices to test
+    ens = [4, 32]
 
     for n in ens
-        A = rand(T,n,n)
-        B = rand(T,n,n)
+        A = rand(T, n, n)
+        B = rand(T, n, n)
         gschurtest(A, B, 20)
     end
 end # testset
@@ -101,23 +107,21 @@ end
     # sizes of matrices to test
     n = 32
     n1 = n >> 2
-    n2 = n - 2*n1
-    A0 = triu(rand(T,n,n) .- 0.5)
-    B0 = triu(rand(T,n,n) .- 0.5)
+    n2 = n - 2 * n1
+    A0 = triu(rand(T, n, n) .- 0.5)
+    B0 = triu(rand(T, n, n) .- 0.5)
     # stuff in some degenerate singularity
-    for j=1:n1
-        A0[j,j] = zero(T)
+    for j in 1:n1
+        A0[j, j] = zero(T)
     end
-    for j=n1+1:n2
-        B0[j,j] = zero(T)
+    for j in (n1 + 1):n2
+        B0[j, j] = zero(T)
     end
-    Qa,_ = qr!(T.(randn(n,n) + 1im * randn(n,n)))
-    Qb,_ = qr!(T.(randn(n,n) + 1im * randn(n,n)))
-    A = Qa*A0*Qa'
-    B = Qb*B0*Qb'
+    Qa, _ = qr!(T.(randn(n, n) + 1im * randn(n, n)))
+    Qb, _ = qr!(T.(randn(n, n) + 1im * randn(n, n)))
+    A = Qa * A0 * Qa'
+    B = Qb * B0 * Qb'
 
     gschurtest(A, B, 20)
 
 end # testset
-
-
