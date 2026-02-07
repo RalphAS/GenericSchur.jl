@@ -3,6 +3,30 @@
 
 # Eigenvectors
 
+function geigvecs(
+        S::Schur{Complex{T}}; left::Bool = false
+    ) where {T <: AbstractFloat}
+    if left
+        v = _gleigvecs!(S.T, S.Z)
+    else
+        v = _geigvecs!(S.T, S.Z)
+    end
+    _enormalize!(v)
+    return v
+end
+
+function geigvecs(S::GeneralizedSchur{T}; left::Bool = false
+) where {T <: STypes}
+    if left
+        v = _gleigvecs(S.S, S.T, S.Q)
+    else
+        v = _geigvecs(S.S, S.T, S.Z)
+    end
+    # CHECKME: Euclidean norm differs from LAPACK, so wait for upstream.
+    # _enormalize!(v)
+    return v
+end
+
 """
 `_geigvecs!(T[,Z])`
 

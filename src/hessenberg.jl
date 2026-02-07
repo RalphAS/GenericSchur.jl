@@ -229,11 +229,3 @@ function _materializeQ(H::Hessenberg{T}, ::Val{:U}) where {T}
     end
     return A
 end
-
-LinearAlgebra.hessenberg!(A::StridedMatrix{<:STypes}) = _hessenberg!(A)
-
-using LinearAlgebra: RealHermSymComplexHerm
-# this should be S <: StridedMatrix, but for stdlib foolishness
-function LinearAlgebra.hessenberg!(Ah::RealHermSymComplexHerm{<:STypes, <:AbstractMatrix})
-    return _hehessenberg!(Hermitian(Ah), Val(Symbol(Ah.uplo)))
-end
