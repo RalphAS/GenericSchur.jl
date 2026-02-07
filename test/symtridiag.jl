@@ -93,7 +93,7 @@ function st_testmat1(n, itype, ::Type{T} = Float64; dtype = :normal) where {T}
     # FIXME: sign adjustment
     A = Q' * diagm(λ) * Q
 
-    F = hessenberg!(A)
+    F = GenericSchur._hessenberg!(A)
     S = F.H
     return S, λ
 end

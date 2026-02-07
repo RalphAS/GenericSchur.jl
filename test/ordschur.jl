@@ -2,7 +2,7 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Complex}
     n = size(A, 1)
     ulp = eps(real(Ty))
 
-    S = schur(A)
+    S = GenericSchur.gschur(A)
     T2 = copy(S.T)
     Z2 = copy(S.Z)
     select = fill(true, n)
@@ -36,7 +36,7 @@ function checkecond(A::Matrix{T}, nsub = 3) where {T}
     for i in inds
         select[i] = true
     end
-    S = schur(A)
+    S = GenericSchur.gschur(A)
 
     @assert real(T) <: BlasFloat
     T1 = copy(S.T)
@@ -70,7 +70,7 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Real}
     n = size(A, 1)
     ulp = eps(real(Ty))
 
-    S = schur(A)
+    S = GenericSchur.gschur(A)
     v = S.values
     # cases to try: 2 reals, 1 complex pair, 1 real & 1 pair, 2 pairs
     nr = [2, 0, 1, 0]

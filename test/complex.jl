@@ -4,7 +4,7 @@ using Printf
 function vectest(A::Matrix{T}, S::Schur{T2}, vtol; normal = false) where {T <: Complex, T2 <: Complex}
     n = size(A, 1)
     ulp = eps(real(T))
-    VR = eigvecs(S)
+    VR = geigvecs(S)
     if verbosity[] > 1
         vec_err = norm(A * VR - VR * diagm(0 => S.values)) / (n * norm(A) * ulp)
         println("r.eigenvector error: $vec_err, vtol = $vtol")
@@ -12,7 +12,7 @@ function vectest(A::Matrix{T}, S::Schur{T2}, vtol; normal = false) where {T <: C
     else
         @test norm(A * VR - VR * diagm(0 => S.values)) / (n * norm(A) * ulp) < vtol
     end
-    VL = eigvecs(S, left = true)
+    VL = geigvecs(S, left = true)
     if verbosity[] > 1
         vec_err = norm(A' * VL - VL * diagm(0 => conj.(S.values))) / (n * norm(A) * ulp)
         println("l.eigenvector error: $vec_err, vtol = $vtol")
@@ -36,12 +36,9 @@ end
 function schurtest(A::Matrix{T}, tol; normal = false) where {T <: Complex}
     n = size(A, 1)
     ulp = eps(real(T))
-    # schur() uses eigtype(), which promotes ComplexF16 to ComplexF32
-    if (real(T) <: BlasFloat) || (LinearAlgebra.eigtype(T) != T)
-        S = GenericSchur.gschur(A)
-    else
-        S = schur(A)
-    end
+    # warning: if we use a wrapper, schur() applies eigtype(),
+    # which promotes ComplexF16 to ComplexF32
+    S = GenericSchur.gschur(A)
     # test 1: S.T is upper triangular
     @test all(tril(S.T, -1) .== 0)
     # test 2: norm(A - S.Z * S.T * S.Z') / (n * norm(A) * ulp) < tol
@@ -195,13 +192,15 @@ end # group testset
     # but not fine enough to make it a slam-dunk.
     setprecision(BigFloat, 80) do
         A, v, econd = godunov(Complex{BigFloat})
-        S = schur(A)
+        S = GenericSchur.gschur(A)
         δ = norm(S.Z * S.T * S.Z' - A)
         @test δ < 100 * eps(big(1.0)) * norm(A)
         t = 3 * δ * econd
         @test isapprox(csort(S.values), v, atol = t)
-        vnew = eigvals(A)
-        @test isapprox(csort(vnew), v, atol = t)
+        if piracy
+            vnew = eigvals(A)
+            @test isapprox(csort(vnew), v, atol = t)
+        end
     end
 end
 
@@ -444,15 +443,15 @@ end # group testset
 
 @testset "eigvecs of nonfinite Schur" begin
     # for now we just make sure nothing throws
-    S0 = schur(rand(ComplexF64, 5, 5))
+    S0 = GenericSchur.gschur(rand(ComplexF64, 5, 5))
     S0.T[2, 3] = Inf
-    V = eigvecs(S0, left = false)
+    V = geigvecs(S0, left = false)
     @test true
-    V = eigvecs(S0, left = true)
+    V = geigvecs(S0, left = true)
     @test true
     S0.T[2, 3] = NaN
-    V = eigvecs(S0, left = false)
+    V = geigvecs(S0, left = false)
     @test true
-    V = eigvecs(S0, left = true)
+    V = geigvecs(S0, left = true)
     @test true
 end

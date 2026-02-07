@@ -91,7 +91,7 @@ function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol = 10) where {Ty <: Real}
     n = size(A, 1)
     ulp = eps(Ty)
 
-    GS = schur(A, B)
+    GS = GenericSchur.ggschur!(copy(A), copy(B))
     S2 = copy(GS.S)
     Q2 = copy(GS.Q)
     T2 = copy(GS.T)
@@ -139,7 +139,7 @@ function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol = 10) where {Ty <: Complex}
     n = size(A, 1)
     ulp = eps(real(Ty))
 
-    GS = schur(A, B)
+    GS = GenericSchur.ggschur!(copy(A), copy(B))
     S2 = copy(GS.S)
     Q2 = copy(GS.Q)
     T2 = copy(GS.T)
@@ -188,6 +188,9 @@ for Ty in [Float64, BigFloat, ComplexF64, Complex{BigFloat}]
     end
 end
 
+if piracy
+# it would be too ugly to rewrite using un-pirated functions
+
 # WARNING: KPTest was adapted from a more thorough validation study.
 # For interesting arguments the tests don't pass as written, but results
 # agree with LAPACK. With benign arguments, however, it is a good
@@ -216,7 +219,7 @@ function KPTest(α, β, x, y, dtype, Ty = ComplexF64)
     )
     A = YH \ (Da / X)
     B = YH \ (Db / X)
-    S = schur(A, B)
+    S = GenericSchur.ggschur!(copy(A), copy(B))
     aest = S.α ./ S.β
     for j in 1:5
         λtrue = atrue[j]
@@ -287,4 +290,6 @@ for Ty in [ComplexF64, Complex{BigFloat}]
         dtype = 2
         KPTest(α, β, x, y, dtype, Ty)
     end
+end
+
 end

@@ -58,13 +58,9 @@ function schurtest(
     ) where {T <: Real}
     n = size(A, 1)
     ulp = eps(T)
-    # schur() uses eigtype(), which promotes ComplexF16 to ComplexF32
-    if (T <: BlasFloat) || (LinearAlgebra.eigtype(T) != Complex{T})
-        S = GenericSchur.gschur(A)
-    else
-        # FIXME: no keywords allowed here; thanks, LinearAlgebra
-        S = schur(A)
-    end
+    # WARNING: if using wrappers, schur() uses eigtype(),
+    # which promotes ComplexF16 to ComplexF32
+    S = GenericSchur.gschur(A)
     # test 1: S.T is upper quasi-triangular
     @test all(tril(S.T, -2) .== 0)
     # check complex 2x2 blocks
@@ -188,13 +184,15 @@ end # group testset
     # but not fine enough to make it a slam-dunk.
     setprecision(BigFloat, 80) do
         A, v, econd = godunov(BigFloat)
-        S = schur(A)
+        S = GenericSchur.gschur(A)
         δ = norm(S.Z * S.T * S.Z' - A)
         @test δ < 100 * eps(big(1.0)) * norm(A)
         t = 3 * δ * econd
         @test isapprox(csort(S.values), v, atol = t)
-        vnew = eigvals(A)
-        @test isapprox(csort(vnew), v, atol = t)
+        if piracy
+            vnew = eigvals(A)
+            @test isapprox(csort(vnew), v, atol = t)
+        end
     end
 end
 

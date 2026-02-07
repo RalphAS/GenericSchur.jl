@@ -173,3 +173,17 @@ if ((VERSION > v"1.7.0-DEV.976") && (VERSION < v"1.7.0-beta3.37"))
         end
     end
 end
+
+# We shouldn't test StdLib code here, so no BlasFloat.
+@testset "vector normalization $T" for T in (BigFloat, Complex{BigFloat})
+    m = round(-log10(eps(real(T))) / 3)
+    A = T.([1 0 10.0^(-2m); 1 1 10.0^(-m); 10.0^(2m) 10.0^m 1])
+    E, V = eigen!(copy(A), scale = true)
+    tol = 10
+    u = eps(real(T))
+    n = size(A, 1)
+    for j in 1:n
+        v = V[:, j]
+        @test abs(norm(v, 2) - 1) / (n * u) < tol
+    end
+end

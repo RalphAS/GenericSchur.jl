@@ -4,11 +4,7 @@ function gschurtest(
     ) where {T <: Complex}
     n = size(A, 1)
     ulp = eps(real(T))
-    if real(T) <: BlasFloat
-        S = GenericSchur.ggschur!(copy(A), copy(B))
-    else
-        S = schur(A, B)
-    end
+    S = GenericSchur.ggschur!(copy(A), copy(B))
     # test 1: S.T is upper triangular
     @test norm(tril(S.S, -1)) / (n * norm(A) * ulp) < tol
     @test norm(tril(S.T, -1)) / (n * norm(A) * ulp) < tol
@@ -34,10 +30,10 @@ function gschurtest(
         @test norm(triu(S.T, 1)) / (n * norm(A) * ulp) < tol
     end
 
-    VR = eigvecs(S)
+    VR = geigvecs(S)
     evcheck = norm((A * VR) * diagm(0 => S.β) - (B * VR) * diagm(0 => S.α))
     @test evcheck / (n * norm(A) * ulp) < tol
-    VL = eigvecs(S, left = true)
+    VL = geigvecs(S, left = true)
     evcheck = norm((A' * VL) * diagm(0 => conj.(S.β)) - (B' * VL) * diagm(0 => conj.(S.α)))
     return @test evcheck / (n * norm(A) * ulp) < tol
 end
@@ -48,11 +44,7 @@ function gschurtest(
     ) where {T <: Real}
     n = size(A, 1)
     ulp = eps(real(T))
-    if real(T) <: BlasFloat
-        S = GenericSchur.ggschur!(copy(A), copy(B))
-    else
-        S = schur(A, B)
-    end
+    S = GenericSchur.ggschur!(copy(A), copy(B))
     # test 1: S.S is quasi-triangular and S.T is upper triangular
     @test norm(tril(S.S, -2)) / (n * norm(A) * ulp) < tol
     @test norm(tril(S.T, -1)) / (n * norm(A) * ulp) < tol
@@ -65,10 +57,10 @@ function gschurtest(
     @test norm(I - S.Z * S.Z') / (n * ulp) < tol
     @test norm(I - S.Q * S.Q') / (n * ulp) < tol
 
-    VR = eigvecs(S)
+    VR = geigvecs(S)
     evcheck = norm((A * VR) * diagm(0 => S.β) - (B * VR) * diagm(0 => S.α))
     @test evcheck / (n * norm(A) * ulp) < tol
-    VL = eigvecs(S, left = true)
+    VL = geigvecs(S, left = true)
     evcheck = norm(diagm(0 => S.β) * (VL' * A) - diagm(0 => S.α) * (VL' * B))
     return @test evcheck / (n * norm(A) * ulp) < tol
 end

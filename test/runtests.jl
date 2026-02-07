@@ -1,10 +1,13 @@
 module GSTest
 using GenericSchur
+using GenericSchur: geigvecs
 using Test
 using Random
 using LinearAlgebra
 include("TMGlib.jl")
 using .TMGlib
+
+const piracy = true
 
 using Aqua
 

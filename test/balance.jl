@@ -41,13 +41,21 @@ function unbal_classic(::Type{T}) where {T}
     return A, λ, V
 end
 
-# Note: to avoid fragility, we only require that the worst unbalanced error be
-# much larger than the worst balanced one.
-# Typically all unbalanced eigenvalues are poor.
-@testset "balancing $T" for T in (
+if piracy
+    bal_test_types = (
         Float64, ComplexF64,
         BigFloat, Complex{BigFloat},
     )
+else
+    bal_test_types = (
+        Float64, ComplexF64,
+    )
+end
+
+# Note: to avoid fragility, we only require that the worst unbalanced error be
+# much larger than the worst balanced one.
+# Typically all unbalanced eigenvalues are poor.
+@testset "balancing $T" for T in bal_test_types
     A, λ, V = unbal_classic(T)
     fu, fb = run_unbalanced(A)
     ru = maximum([abs(fu.values[j] - λ[j]) for j in 1:3])
@@ -56,8 +64,8 @@ end
 
     if T <: Complex
         Abal, B = balance!(copy(A))
-        sb = schur(Abal)
-        Vl = eigvecs(sb, left = true)
+        sb = GenericSchur.gschur(copy(Abal))
+        Vl = GenericSchur.geigvecs(sb, left = true)
         ldiv!(B, Vl)
         @test A' * Vl ≈ Vl * diagm(0 => conj.(sb.values))
     end
@@ -93,20 +101,5 @@ end
                 @test nsubdiag == 0
             end # for n3
         end
-    end
-end
-
-# This is a convenient place for other checks of the simple wrapper.
-# We shouldn't test StdLib code here, so no BlasFloat.
-@testset "vector normalization $T" for T in (BigFloat, Complex{BigFloat})
-    m = round(-log10(eps(real(T))) / 3)
-    A = T.([1 0 10.0^(-2m); 1 1 10.0^(-m); 10.0^(2m) 10.0^m 1])
-    E, V = eigen(A, scale = true)
-    tol = 10
-    u = eps(real(T))
-    n = size(A, 1)
-    for j in 1:n
-        v = V[:, j]
-        @test abs(norm(v, 2) - 1) / (n * u) < tol
     end
 end
