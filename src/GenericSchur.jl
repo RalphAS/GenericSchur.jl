@@ -13,6 +13,7 @@ VERSION >= v"1.11.0-DEV.469" && eval(
         geigvals!,
         gordschur!,
         geigvecs,
+        set_piracy!,
         UnconvergedException,
         IllConditionException,
         Balancer
@@ -53,10 +54,53 @@ struct IllConditionException <: Exception
     index::Int
 end
 
-# placeholder for future options
-const piracy = true
+@static if VERSION >= v"1.6"
+    using Preferences
+end
 
-include("pirates.jl")
+# In order to make the API consistent over versions,
+# we define these even when they are no-ops.
+
+function _get_piracy()
+    @static if VERSION >= v"1.6"
+        _piracy_s = @load_preference("piracy", "true")
+        if _piracy_s == "true"
+            _piracy = true
+        elseif _piracy_s == "false"
+            _piracy = false
+        else
+            @error("Invalid piracy preference; must be \"true\" or \"false\"")
+            _piracy = true
+        end
+    else
+        _piracy = true
+    end
+    return _piracy
+end
+
+const piracy = _get_piracy()
+
+"""
+    set_piracy!(::Bool)
+
+Convenience wrapper for determining whether piratical `LinearAlgebra` methods will
+be added by this package for future Julia sessions.
+"""
+function set_piracy!(v::Bool)
+    return @static if VERSION >= v"1.6"
+        p = _get_piracy()
+        @set_preferences!("piracy" => v ? "true" : "false")
+        if v != p
+            @info("Piracy setting changed; restart Julia for this to take effect!")
+        end
+    else
+        v || @error("piracy is forced for Julia versions < v1.6")
+    end
+end
+
+if piracy
+    include("pirates.jl")
+end
 
 ############################################################################
 # Internal implementations follow

@@ -5,9 +5,13 @@ real and complex matrices of generic numeric type, i.e. those
 not supported by the LAPACK-based routines in the standard LinearAlgebra
 library. Examples are `BigFloat`, `Float128`, and `DoubleFloat`.
 
-The `schur!`, `eigvals!`, and `eigen!` functions in the `LinearAlgebra`
+Normally, the `schur!`, `eigvals!`, and `eigen!` functions in the `LinearAlgebra`
 standard library are overloaded here, and may be accessed through the usual
 `schur`, `eigvals`, and `eigen` wrappers.
+
+!!! note "Type piracy"
+	Most users will enjoy the convenience of the functions from `LinearAlgebra`,
+	but these piratical methods may be omitted; see [Preferences](@ref) for details.
 
 ## Complex Schur decomposition
 
@@ -37,7 +41,8 @@ but currently permutation (which would reduce the work) is not.
 
 ## Hermitian matrices
 
-The Schur decomposition of a Hermitian matrix is identical to diagonalization, i.e.
+The Schur decomposition of a Hermitian (or real symmetric) matrix is identical to
+diagonalization, i.e.
 the upper-triangular factor is diagonal. This package provides such decompositions
 for real-symmetric and complex-Hermitian matrices via `eigen!` etc.
 In these cases, an `alg` argument
@@ -109,6 +114,14 @@ An invariant (viz. deflating) subspace may be extracted via methods of the
 `LinearAlgebra.ordschur` function; see the documentation in the LinearAlgebra stdlib.
 This package provides this for ordinary and generalized Schur factorizations, both
 real and complex element types.
+
+## Preferences
+The runtime behavior can be adjusted by use of package
+[Preferences](https://github.com/JuliaPackaging/Preferences.jl).
+
+### Type piracy
+The `piracy` preference may be set to "true" (the default) or "false" to determine
+whether methods are added to functions such as `LinearAlgebra.schur!`.
 
 ## Acknowledgements
 

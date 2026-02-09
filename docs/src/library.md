@@ -54,3 +54,8 @@ GenericSchur.IllConditionException
 
 GenericSchur.UnconvergedException
 ```
+
+## Preference handling
+```@docs
+GenericSchur.set_piracy!
+```

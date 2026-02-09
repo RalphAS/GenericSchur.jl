@@ -4,16 +4,16 @@ using GenericSchur: geigvecs
 using Test
 using Random
 using LinearAlgebra
+using LinearAlgebra.BLAS: BlasFloat
+
 include("TMGlib.jl")
 using .TMGlib
 
-const piracy = true
-
 using Aqua
 
-Aqua.test_all(GenericSchur; piracies = false)
+const piracy = GenericSchur._get_piracy()
 
-import LinearAlgebra.BLAS.BlasFloat
+Aqua.test_all(GenericSchur; piracies = !piracy)
 
 _vbst = parse(Int, get(ENV, "TEST_VERBOSITY", "0"))
 const verbosity = Ref(_vbst)
@@ -55,7 +55,13 @@ include("generalized.jl")
 include("gordschur.jl")
 
 include("complex.jl")
-include("wrappers.jl")
+
+if piracy
+    include("wrappers.jl")
+# else
+    # should be handled by Aqua
+end
+
 include("symtridiag.jl")
 include("balance.jl")
 include("real.jl")
