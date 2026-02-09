@@ -1,7 +1,5 @@
 using Documenter, GenericSchur, LinearAlgebra
 
-DocMeta.setdocmeta!(GenericSchur, :DocTestSetup, :(using GenericicSchur); recursive=true)
-
 makedocs(
     modules = [GenericSchur],
     sitename = "GenericSchur.jl",
