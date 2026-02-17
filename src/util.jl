@@ -113,14 +113,18 @@ function rankUpdate!(α::Number, x::StridedVector, y::StridedVector, A::StridedM
     return
 end
 
-# index-unsafe upper triangular solve
-# with scaling to prevent overflow
 # Actually solves A[1:n,1:n] * x = s * b and returns s, a scaling factor
 # such that components of x are manageable.
 # NB: works with leading n×n block of A and leading n terms of b, x
 # Hence all the loops must be explicit.
 # This is a translation of (part of) LAPACK::zlatrs, q.v. for details.
+# index-unsafe
 # Provide `b` in argument `x`; note that `cnorm` may be updated.
+"""
+scale = _usolve!(A, n, x, cnorms)
+
+Upper triangular solve with scaling to prevent overflow
+"""
 function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
 
     cabs1half(z) = abs(real(z) / 2) + abs(imag(z) / 2)
@@ -288,6 +292,11 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
 end
 
 # conjugate transpose version
+"""
+scale = _cusolve!(A, n, x, cnorms)
+
+Transpose-of-upper-triangular solve with scaling to prevent overflow
+"""
 function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
 
     cabs1half(z) = abs(real(z) / 2) + abs(imag(z) / 2)
@@ -676,13 +685,18 @@ function _safe_lu_solve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
     return b, unperturbed, scale
 end
 
-# Solve (a * A - (br+im*bi) * D) * X = s * B
-# where A and D are na×na real matrices, D is diagonal, a is real
-# X and B are complex vectors of length na
-# Used by real generalized eigvecs().
-# FIXME: naive placeholder for now
-# eventually implement scheme from dlaln2 to avoid overflow
-function _xsolve(a, A::AbstractMatrix{Ty}, Dd, br, bi, B) where {Ty}
+"""
+    scale, x, xnorm = _xsolve(a,A,d,br,bi,B)
+
+Solve `(a * A - (br+im*bi) * D) * X = s * B`
+where A and D are na×na real matrices, D is `Diagonal(d)`, a is real
+X and B are complex vectors of length na
+"""
+function _xsolve(a, A::AbstractMatrix{Ty}, Dd::AbstractVector{Ty}, br, bi, B) where {Ty}
+    # Used by real eigvecs() (standard and generalized).
+    # Note: currently delegates to more general routine, overwriting B
+    # eventually maybe implement scheme from dlaln2
+    # (i.e., specialized to rank 1 or 2, w/ additional safeguard)
     s = one(Ty)
     na = size(A, 1)
     # x = (a * A - Diagonal((br+im*bi) * Dd)) \ B
