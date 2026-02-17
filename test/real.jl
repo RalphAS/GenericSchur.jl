@@ -97,7 +97,8 @@ function schurtest(
     # test 3: S.Z is unitary: norm(I - S.Z * S.Z') / (n * ulp) < tol
     @test norm(I - Sc.Z * Sc.Z') / (n * ulp) < tol
     # test 4: S.values are e.v. of T
-    return @test all(csort(Sc.values) .== csort(diag(Sc.T)))
+    @test all(csort(Sc.values) .== csort(diag(Sc.T)))
+    return
 end
 
 function hesstest(A::Matrix{T}, tol) where {T <: Real}
@@ -121,7 +122,8 @@ function hesstest(A::Matrix{T}, tol) where {T <: Real}
     @test decomp_err < tol
     # test 3: S.Z is orthogonal: norm(I - S.Z * S.Z') / (n * ulp) < tol
     orth_err = norm(I - Q * Q') / (n * ulp)
-    return @test orth_err < tol
+    @test orth_err < tol
+    return
 end
 
 # random orthogonal matrix

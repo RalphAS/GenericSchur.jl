@@ -40,7 +40,8 @@ struct UnconvergedException <: Exception
     msg::String
 end
 function Base.showerror(io::IO, e::UnconvergedException)
-    return print(io, "Convergence failure; $(e.msg)")
+    print(io, "Convergence failure; $(e.msg)")
+    return
 end
 
 """
@@ -937,7 +938,8 @@ function doubleShiftQR!(
         end
         @mydebug dcheck(Z * H * Z', " QR k=$k ")
     end # k loop
-    return @mydebug println()
+    @mydebug println()
+    return
 end
 
 include("vectors.jl")

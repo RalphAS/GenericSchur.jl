@@ -35,8 +35,8 @@ function checkgsyl(m = 4, n = 2, Ty = Float64)
         @test fwd2b < sqrt(stol)
     end
     @test bwd2a < tol
-    return @test bwd2b < tol
-
+    @test bwd2b < tol
+    return
 end
 
 function checkgasyl(m = 4, n = 2, Ty = Float64)
@@ -70,8 +70,8 @@ function checkgasyl(m = 4, n = 2, Ty = Float64)
         @test fwd2b < sqrt(stol)
     end
     @test bwd2a < tol
-    return @test bwd2b < tol
-
+    @test bwd2b < tol
+    return
 end
 
 for Ty in [ComplexF64, Float64, Complex{BigFloat}]
@@ -132,7 +132,8 @@ function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol = 10) where {Ty <: Real}
         errs[i] = t / (ulp + abs(w))
         wwanted = deleteat!(wwanted, j)
     end
-    return @test all(errs .< tol)
+    @test all(errs .< tol)
+    return
 end
 
 function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol = 10) where {Ty <: Complex}
@@ -175,7 +176,8 @@ function checkord(A::Matrix{Ty}, B::Matrix{Ty}, tol = 10) where {Ty <: Complex}
         errs[i] = t / (ulp + abs(w))
         wwanted = deleteat!(wwanted, j)
     end
-    return @test all(errs .< tol)
+    @test all(errs .< tol)
+    return
 end
 
 for Ty in [Float64, BigFloat, ComplexF64, Complex{BigFloat}]

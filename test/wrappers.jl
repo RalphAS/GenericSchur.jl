@@ -49,7 +49,8 @@ function _chkeigvecs(
         end
         nvecs_ok += ok
     end
-    return @test nvecs_ok == m
+    @test nvecs_ok == m
+    return
 end
 
 revsort(λ::Real) = -λ

@@ -35,7 +35,8 @@ function gschurtest(
     @test evcheck / (n * norm(A) * ulp) < tol
     VL = geigvecs(S, left = true)
     evcheck = norm((A' * VL) * diagm(0 => conj.(S.β)) - (B' * VL) * diagm(0 => conj.(S.α)))
-    return @test evcheck / (n * norm(A) * ulp) < tol
+    @test evcheck / (n * norm(A) * ulp) < tol
+    return
 end
 
 function gschurtest(
@@ -62,7 +63,8 @@ function gschurtest(
     @test evcheck / (n * norm(A) * ulp) < tol
     VL = geigvecs(S, left = true)
     evcheck = norm(diagm(0 => S.β) * (VL' * A) - diagm(0 => S.α) * (VL' * B))
-    return @test evcheck / (n * norm(A) * ulp) < tol
+    @test evcheck / (n * norm(A) * ulp) < tol
+    return
 end
 
 @testset "generalized basic sanity $T" for T in [

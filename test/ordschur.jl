@@ -24,7 +24,8 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Complex}
         w = T2[i, i]
         errs[i] = minimum(abs.(wwanted .- w)) / (ulp + abs(w))
     end
-    return @test all(errs .< tol)
+    @test all(errs .< tol)
+    return
 end
 
 using LinearAlgebra.LAPACK: trsen!, BlasInt
@@ -49,8 +50,8 @@ function checkecond(A::Matrix{T}, nsub = 3) where {T}
     sep2 = subspacesep(S2, count(select))
 
     @test s1 ≈ s2
-    return @test sep1 ≈ sep2
-
+    @test sep1 ≈ sep2
+    return
 end
 
 for Ty in [Complex{Float64}]

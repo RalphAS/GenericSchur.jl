@@ -20,7 +20,7 @@ function vectest(A::Matrix{T}, S::Schur{T2}, vtol; normal = false) where {T <: C
     else
         @test norm(A' * VL - VL * diagm(0 => conj.(S.values))) / (n * norm(A) * ulp) < vtol
     end
-    return if normal
+    if normal
         # check orthonormality of vectors where appropriate
         if (T == ComplexF16) && (n > 10)
             # is this simply too many ops for this type?
@@ -31,6 +31,7 @@ function vectest(A::Matrix{T}, S::Schur{T2}, vtol; normal = false) where {T <: C
             @test norm(VL * VL' - I) / (n * ulp) < vtol
         end
     end
+    return
 end
 
 function schurtest(A::Matrix{T}, tol; normal = false) where {T <: Complex}
@@ -64,7 +65,8 @@ function schurtest(A::Matrix{T}, tol; normal = false) where {T <: Complex}
         @test norm(triu(S.T, 1)) / (n * norm(A) * ulp) < tol
     end
     vtol = tol
-    return vectest(A, S, tol, normal = normal)
+    vectest(A, S, tol, normal = normal)
+    return
 end
 
 function hesstest(A::Matrix{T}, tol) where {T <: Complex}
@@ -90,7 +92,8 @@ function hesstest(A::Matrix{T}, tol) where {T <: Complex}
     orth_err = norm(I - Q * Q') / (n * ulp)
     @test orth_err < tol
     # test 4: subdiagonal is real
-    return @test all(isreal.(diag(HH, -1)))
+    @test all(isreal.(diag(HH, -1)))
+    return
 end
 
 function hesstest(A::Hermitian{T}, tol) where {T <: Complex}
@@ -111,7 +114,8 @@ function hesstest(A::Hermitian{T}, tol) where {T <: Complex}
     @test decomp_err < tol
     # test 3: S.Z is orthogonal: norm(I - S.Z * S.Z') / (n * ulp) < tol
     orth_err = norm(I - Q * Q') / (n * ulp)
-    return @test orth_err < tol
+    @test orth_err < tol
+    return
 end
 
 
