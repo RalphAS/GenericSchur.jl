@@ -685,22 +685,66 @@ function _safe_lu_solve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
     return b, unperturbed, scale
 end
 
+# Triangular solver used by real eigvecs() (standard and generalized).
 """
-    scale, x, xnorm = _xsolve(a,A,d,br,bi,B)
+    scale, x, xnorm, perturbed = _xsolve(a,A,d,b,B)
 
-Solve `(a * A - (br+im*bi) * D) * X = s * B`
-where A and D are na×na real matrices, D is `Diagonal(d)`, a is real
-X and B are complex vectors of length na
+Solve `(a * A - b * D) * X = s * B`
+where `A` and `D` are `na×na` real matrices, `D` is `Diagonal(d)`, `a` is real, `b` complex.
+`X` and `B` are complex vectors of length `na`; compute `s` to avoid overflow.
+Perturb if necessary to escape singularity.
 """
-function _xsolve(a, A::AbstractMatrix{Ty}, Dd::AbstractVector{Ty}, br, bi, B) where {Ty}
-    # Used by real eigvecs() (standard and generalized).
-    # Note: currently delegates to more general routine, overwriting B
-    # eventually maybe implement scheme from dlaln2
-    # (i.e., specialized to rank 1 or 2, w/ additional safeguard)
-    s = one(Ty)
+function _xsolve(a, A::AbstractMatrix{Ty}, d::AbstractVector{Ty}, b, B, smin) where {Ty}
+    # Note: currently may delegate to more general routine, overwriting B
+    one_t = one(Ty)
+    zero_t = zero(Ty)
+    s = one_t
     na = size(A, 1)
-    # x = (a * A - Diagonal((br+im*bi) * Dd)) \ B
-    x, _, s = _safe_lu_solve!(a * A - Diagonal((br + im * bi) * Dd), B)
+    small = 2 * safemin(Ty)
+    bignum = s / small
+    smin = max(smin, small)
+    perturbed = false
+    if na == 1
+        csr = a * A[1,1] - real(b) * d[1]
+        csi = -imag(b) * d[1]
+        cnorm = abs(csr) + abs(csi)
+        if cnorm < smin
+            perturbed = true
+            csr = smin
+            csi = zero_t
+            cnorm = smin
+        end
+        bnorm = abs1(B[1])
+        if (cnorm < 1) && (bnorm > 1) && (bnorm > bignum * cnorm)
+            s = one_t / bnorm
+        end
+        x = B[1] * s / (csr + im * csi)
+        xnorm = abs1(x[1])
+        B[1] = x
+        return s, B, xnorm, perturbed
+    end
+    cmax = zero_t
+    for j in 1:na
+        for i in 1:na
+            z = a * A[i,j] + 0im
+            if i == j
+                z -= b * d[i]
+            end
+            cmax = max(cmax, abs1(z))
+        end
+    end
+    if cmax < smin
+        perturbed = true
+        bnorm = maximum(abs1, B)
+        if (smin < 1) && (bnorm > 1) && (bnorm > bignum * smin)
+            s = one_t / bnorm
+        end
+        t1 = s / smin
+        rmul!(B, t1)
+        x = B
+    else
+        x, _, s = _safe_lu_solve!(a * A - Diagonal(complex(b) * d), B)
+    end
     xnorm = norm(x)
-    return s, x, xnorm
+    return s, x, xnorm, perturbed
 end

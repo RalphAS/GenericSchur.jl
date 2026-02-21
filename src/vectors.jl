@@ -750,7 +750,8 @@ function _geigvecs(
                 Bdiag = [P[j, j]]
             end
             jx = j + na - 1
-            scale, xsum, t1 = _xsolve(a, view(S, j:jx, j:jx), Bdiag, br, bi, view(v, j:jx))
+            scale, xsum, t1 = _xsolve(a, view(S, j:jx, j:jx), Bdiag, br + im * bi, view(v, j:jx),
+                                      dmin)
             if scale < one(Ty)
                 v[1:je] .= scale * v[1:je]
             end
@@ -1003,7 +1004,7 @@ function _gleigvecs(
                 sum_P += P[jr, j:jx] .* v[jr]
             end
             spsum = -a * sum_S + (br + im * bi) * sum_P
-            scale, y, t1 = _xsolve(a, view(S', j:jx, j:jx), Bdiag, br, bi, spsum)
+            scale, y, t1 = _xsolve(a, view(S', j:jx, j:jx), Bdiag, br + im * bi, spsum, dmin)
             v[j:jx] .= y
             if scale < one(Ty)
                 v[je:(j - 1)] .= scale * v[je:(j - 1)]
