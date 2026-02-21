@@ -69,7 +69,7 @@ non-standard (but less expensive) form is produced.
 
 ## Eigenvectors
 
-Right and left eigenvectors are available from complex Schur factorizations,
+Right and left eigenvectors are available from Schur factorizations,
 using
 
 ```julia

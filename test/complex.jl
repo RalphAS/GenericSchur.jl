@@ -1,39 +1,3 @@
-using Printf
-
-# isolate eigvec tests for use with special cases
-function vectest(A::Matrix{T}, S::Schur{T2}, vtol; normal = false) where {T <: Complex, T2 <: Complex}
-    n = size(A, 1)
-    ulp = eps(real(T))
-    VR = geigvecs(S)
-    if verbosity[] > 1
-        vec_err = norm(A * VR - VR * diagm(0 => S.values)) / (n * norm(A) * ulp)
-        println("r.eigenvector error: $vec_err, vtol = $vtol")
-        @test vec_err < 1000
-    else
-        @test norm(A * VR - VR * diagm(0 => S.values)) / (n * norm(A) * ulp) < vtol
-    end
-    VL = geigvecs(S, left = true)
-    if verbosity[] > 1
-        vec_err = norm(A' * VL - VL * diagm(0 => conj.(S.values))) / (n * norm(A) * ulp)
-        println("l.eigenvector error: $vec_err, vtol = $vtol")
-        @test vec_err < 1000
-    else
-        @test norm(A' * VL - VL * diagm(0 => conj.(S.values))) / (n * norm(A) * ulp) < vtol
-    end
-    if normal
-        # check orthonormality of vectors where appropriate
-        if (T == ComplexF16) && (n > 10)
-            # is this simply too many ops for this type?
-            @test_broken norm(VR * VR' - I) / (n * ulp) < vtol
-            @test_broken norm(VL * VL' - I) / (n * ulp) < vtol
-        else
-            @test norm(VR * VR' - I) / (n * ulp) < vtol
-            @test norm(VL * VL' - I) / (n * ulp) < vtol
-        end
-    end
-    return
-end
-
 function schurtest(A::Matrix{T}, tol; normal = false) where {T <: Complex}
     n = size(A, 1)
     ulp = eps(real(T))
@@ -119,24 +83,6 @@ function hesstest(A::Hermitian{T}, tol) where {T <: Complex}
 end
 
 
-"""
-generate a random unitary matrix
-
-Unitary matrices are normal, so Schur decomposition is diagonal for them.
-(This is not only another test, but sometimes actually useful.)
-"""
-function randu(::Type{T}, n) where {T <: Complex}
-    if real(T) ∈ [Float16, Float32, Float64]
-        A = randn(T, n, n)
-        F = qr(A)
-        return Matrix(F.Q) * Diagonal(sign.(diag(F.R)))
-    else
-        # don't have normal deviates for other types, but need appropriate QR
-        A = randn(ComplexF64, n, n)
-        F = qr(convert.(T, A))
-        return Matrix(F.Q) * Diagonal(sign.(diag(F.R)))
-    end
-end
 
 Random.seed!(1234)
 

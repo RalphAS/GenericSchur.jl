@@ -56,7 +56,7 @@ scheme used in the complex LAPACK routines. Balancing is also available.
 
 ### Eigenvectors
 
-Right and left eigenvectors are available from complex Schur factorizations,
+Right and left eigenvectors are available from Schur factorizations,
 using
 
 ```julia
@@ -85,8 +85,7 @@ functions with matrix arguments whose element type `T <: Real`.
 The result is in standard form, so
 pair-blocks (and therefore rank-2 invariant subspaces) should be fully resolved.
 
-Eigenvectors are not currently available for the "real Schur" forms.
-But don't despair; one can convert a standard quasi-triangular real `Schur`
+One can convert a standard quasi-triangular real `Schur`
 into a complex `Schur` with the `triangularize` function provided here.
 
 ## Balancing

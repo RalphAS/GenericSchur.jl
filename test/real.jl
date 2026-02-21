@@ -54,7 +54,7 @@ function checkeigvals(
 end
 
 function schurtest(
-        A::Matrix{T}, tol; normal = false, baddec = false,
+        A::Matrix{T}, tol; normal = false, baddec = false, vecs = true,
     ) where {T <: Real}
     n = size(A, 1)
     ulp = eps(T)
@@ -86,6 +86,10 @@ function schurtest(
         # necessary but not really sufficient (complex blocks)
         @test norm(triu(S.T, 2)) / (n * norm(A) * ulp) < tol
         # TODO: in this case comparison to LAPACK eigenvalues is legit
+    end
+    vtol = tol
+    if vecs
+        vectest(A, S, tol, normal = normal)
     end
 
     Sc = triangularize(S)
@@ -124,20 +128,6 @@ function hesstest(A::Matrix{T}, tol) where {T <: Real}
     orth_err = norm(I - Q * Q') / (n * ulp)
     @test orth_err < tol
     return
-end
-
-# random orthogonal matrix
-function rando(::Type{T}, n) where {T <: Real}
-    if T ∈ [Float16, Float32, Float64]
-        A = randn(T, n, n)
-        F = qr(A)
-        return Matrix(F.Q)
-    else
-        # don't have normal deviates for other types, but need appropriate QR
-        A = randn(Float64, n, n)
-        F = qr(convert.(T, A))
-        return Matrix(F.Q)
-    end
 end
 
 Random.seed!(1234)
