@@ -77,12 +77,8 @@ S = schur(A)
 VR = eigvecs(S)
 VL = eigvecs(S,left=true)
 ```
-The results are currently unreliable if the Frobenius norm of `A` is very
-small or very large, so scale if necessary (see Balancing, below).
-
-Eigenvectors are not currently available for the "real Schur" forms.
-But don't despair; one can convert a standard quasi-triangular real `Schur`
-into a complex `Schur` with the `triangularize` function provided here.
+The results are currently unreliable if the Frobenius norm of `A` is extremely
+small or large, so scale if necessary (also see Balancing, below).
 
 ## Balancing
 
