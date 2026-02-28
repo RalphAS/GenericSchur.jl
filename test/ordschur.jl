@@ -9,7 +9,7 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Complex}
     for i in 1:(n >> 1)
         select[i] = false
     end
-    T2, Z2, v = GenericSchur.gordschur!(T2, Z2, select)
+    T2, Z2, w = GenericSchur.gordschur!(T2, Z2, select)
 
     # usual tests for Schur
     @test all(tril(T2, -1) .== 0)
@@ -28,7 +28,7 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Complex}
     return
 end
 
-using LinearAlgebra.LAPACK: trsen!, BlasInt
+using LinearAlgebra.LAPACK: BlasInt, trsen!
 
 function checkecond(A::Matrix{T}, nsub = 3) where {T}
     n = size(A, 1)
@@ -43,7 +43,7 @@ function checkecond(A::Matrix{T}, nsub = 3) where {T}
     T1 = copy(S.T)
     Z1 = copy(S.Z)
     fselect = BlasInt.([x ? 1 : 0 for x in select])
-    T1, Z1, w1, s1, sep1 = trsen!('B', 'V', fselect, T1, Z1)
+    T1, Z1, _, s1, sep1 = trsen!('B', 'V', fselect, T1, Z1)
 
     S2 = ordschur(S, select)
     s2 = eigvalscond(S2, count(select))
@@ -72,7 +72,7 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Real}
     ulp = eps(real(Ty))
 
     S = GenericSchur.gschur(A)
-    v = S.values
+    wv = S.values
     # cases to try: 2 reals, 1 complex pair, 1 real & 1 pair, 2 pairs
     nr = [2, 0, 1, 0]
     ni = [0, 2, 2, 4]
@@ -86,14 +86,14 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Real}
         while (nr_needed + ni_needed > 0) && i > 2
             i -= 1
             if nr_needed > 0
-                if imag(v[i]) == 0
+                if imag(wv[i]) == 0
                     select[i] = true
                     nr_needed -= 1
                 end
             end
             if ni_needed > 0
-                ivi = imag(v[i])
-                if (abs(ivi) > 1000ulp) && (imag(v[i - 1]) == -ivi)
+                iwi = imag(wv[i])
+                if (abs(iwi) > 1000ulp) && (imag(wv[i - 1]) == -iwi)
                     select[i] = true
                     select[i - 1] = true
                     ni_needed -= 2
@@ -105,20 +105,28 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Real}
             @warn "failed to find acceptable subset (class $icase) for checking ordschur"
             continue
         end
-        T2, Z2, v = GenericSchur.gordschur!(T2, Z2, select)
+        T2, Z2, wv2 = GenericSchur.gordschur!(T2, Z2, select)
 
         # usual tests for Schur
         @test all(tril(T2, -2) .== 0)
         @test norm(Z2 * T2 * Z2' - A) / (n * norm(A) * ulp) < tol
         @test norm(I - Z2 * Z2') / (n * ulp) < tol
+        @test checkeigvals(T2, wv2, tol)
 
         # make sure we got the ones we asked for
         nwanted = count(select)
         wwanted = [S.values[j] for j in 1:n if select[j]]
         errs = zeros(nwanted)
+        wscale = maximum(abs, wv2)
         for i in 1:nwanted
-            w = T2[i, i]
-            errs[i] = minimum(abs.(wwanted .- w)) / (ulp + abs(w))
+            w = wv2[i]
+            # CHECKME: is there a better choice of normalization for small w?
+            errs[i] = minimum(abs.(wwanted .- w)) / (ulp + wscale)
+        end
+        if verbosity[] > 2
+            println("wanted, got")
+            display(hcat(wwanted, [wv[i] for i in 1:nwanted]))
+            println()
         end
         @test all(errs .< tol)
     end

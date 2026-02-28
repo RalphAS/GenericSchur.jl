@@ -3,7 +3,7 @@
 # Serious accuracy verification is elsewhere.
 
 using LinearAlgebra
-using LinearAlgebra: sorteig!, eigsortby
+using LinearAlgebra: eigsortby, sorteig!
 using Test
 using GenericSchur
 
@@ -53,61 +53,6 @@ function _chkeigvecs(
     return
 end
 
-revsort(λ::Real) = -λ
-revsort(λ::Complex) = (-real(λ), -imag(λ))
-
-let T = BigFloat
-    n = 10
-    # FIXME: should protect against accidental poor condition
-    A = rand(T, n, n)
-    for (w, f) in zip([:bare, :hermitian, :symmetric], [identity, Hermitian, Symmetric])
-        @testset "wrappers $w $T" begin
-            Awrk = f(A)
-            E = eigen(Awrk, sortby = eigsortby)
-            @test norm(Awrk * E.vectors - E.vectors * Diagonal(E.values)) < sqrt(eps(T))
-            v = eigvecs(Awrk, sortby = eigsortby)
-            _chkeigvecs(E.vectors, v, w != :bare)
-            λ = eigvals(Awrk, sortby = eigsortby)
-            if (verbosity[] > 0) && (! (λ ≈ E.values))
-                @warn "eigval order comparison (eigvals, eigen, diff): "
-                display(hcat(λ, E.values, λ .- E.values))
-                println()
-            end
-            @test λ ≈ E.values
-            Er = eigen(Awrk, sortby = revsort)
-            vr = eigvecs(Awrk, sortby = revsort)
-            λr = eigvals(Awrk, sortby = revsort)
-            @test Er.values ≈ reverse(E.values)
-            @test λr ≈ reverse(λ)
-            for j in 1:n
-                @test vr[:, j] ≈ v[:, n + 1 - j]
-            end
-        end
-    end
-end
-
-let T = Complex{BigFloat}
-    n = 10
-    # FIXME: should protect against accidental poor condition
-    A = rand(T, n, n)
-    for (w, f) in zip([:bare, :hermitian], [identity, Hermitian])
-        @testset "wrappers $w $T" begin
-            Awrk = f(A)
-            E = eigen(Awrk, sortby = eigsortby)
-            @test norm(Awrk * E.vectors - E.vectors * Diagonal(E.values)) < sqrt(eps(real(T)))
-            v = eigvecs(Awrk, sortby = eigsortby)
-            _chkeigvecs(E.vectors, v, w != :bare)
-            λ = eigvals(Awrk, sortby = eigsortby)
-            @test λ ≈ E.values
-            if (verbosity[] > 0) && (! (λ ≈ E.values))
-                @warn "eigval order comparison (eigvals, eigen, diff): "
-                display(hcat(λ, E.values, λ .- E.values))
-                println()
-            end
-        end
-    end
-end
-
 function _chkrcond(x, y, rtol, atol = 1.0e3 * eps(eltype(x)))
     ok = true
     for (xi, yi) in zip(x, y)
@@ -129,62 +74,121 @@ function _chkrcond(x, y, rtol, atol = 1.0e3 * eps(eltype(x)))
     return ok
 end
 
-# This section tests compatibility with Julia PR #38483 which was reverted.
-# It should be rewritten but is kept to facilitate study of questionable cases.
-if ((VERSION > v"1.7.0-DEV.976") && (VERSION < v"1.7.0-beta3.37"))
-    for (T, Tref) in ((Complex{BigFloat}, ComplexF64), (BigFloat, Float64))
-        @testset "extended eigen() $T" begin
-            n = 10
-            Aref = rand(Tref, n, n)
-            A = T.(Aref)
-            old = precision(real(T))
-            @assert old >= 53
-            if T <: Real
-                Eref1 = eigen(Aref, jvl = true)
-                # we convert to complex for condition nrs, so this is a fairer check
-                Eref2 = eigen(Aref .+ 0im, jvl = true, jce = true, jcv = true)
-            else
-                Eref1 = eigen(Aref, jvl = true, jce = true, jcv = true)
-                Eref2 = Eref1
-            end
-            setprecision(real(T), 53) do
-                E = eigen(A, jvl = true, jce = true, jcv = true)
-                @test norm(E.vectorsl' * A - Diagonal(E.values) * E.vectorsl') < sqrt(eps(real(T)))
-                if verbosity[] > 0
-                    @info "eigval comparison (trial, ref, diff): "
-                    display(hcat(E.values, Eref1.values, E.values .- Eref1.values))
+revsort(λ::Real) = -λ
+revsort(λ::Complex) = (-real(λ), -imag(λ))
+
+if piracy
+    let T = BigFloat
+        n = 10
+        # FIXME: should protect against accidental poor condition
+        A = rand(T, n, n)
+        for (w, f) in zip([:bare, :hermitian, :symmetric], [identity, Hermitian, Symmetric])
+            @testset "wrappers $w $T" begin
+                Awrk = f(A)
+                E = eigen(Awrk, sortby = eigsortby)
+                @test norm(Awrk * E.vectors - E.vectors * Diagonal(E.values)) < sqrt(eps(T))
+                v = eigvecs(Awrk, sortby = eigsortby)
+                _chkeigvecs(E.vectors, v, w != :bare)
+                λ = eigvals(Awrk, sortby = eigsortby)
+                if (verbosity[] > 0) && (! (λ ≈ E.values))
+                    @warn "eigval order comparison (eigvals, eigen, diff): "
+                    display(hcat(λ, E.values, λ .- E.values))
                     println()
                 end
-                @test sorteig!(E.values) ≈ sorteig!(Eref1.values)
-                # stdlib inverts condition nrs for real matrices (WTF?)
-                # if we switch to the real forms, we would need this:
-                # rconde = (Tref <: Real) ? (1.0 ./ Eref1.rconde) : Eref1.rconde
-                # rcondv = (Tref <: Real) ? (1.0 ./ Eref1.rcondv) : Eref1.rcondv
-                rconde = Eref2.rconde
-                rcondv = Eref2.rcondv
-                @test _chkrcond(E.rconde, rconde, 0.1)
-                # CHECKME: we should not need to be so lenient.
-                # The nasty cases are not common (empirically 1 vector in < 10% of 10x10),
-                # but nightlys on Github are good at finding them.
-                # This accuracy is sufficient for typical applications.
-                @test _chkrcond(E.rcondv, rcondv, 5.0)
-                _chkeigvecs(Eref1.vectors, E.vectors, false)
-                _chkeigvecs(Eref1.vectorsl, E.vectorsl, false)
+                @test λ ≈ E.values
+                Er = eigen(Awrk, sortby = revsort)
+                vr = eigvecs(Awrk, sortby = revsort)
+                λr = eigvals(Awrk, sortby = revsort)
+                @test Er.values ≈ reverse(E.values)
+                @test λr ≈ reverse(λ)
+                for j in 1:n
+                    @test vr[:, j] ≈ v[:, n + 1 - j]
+                end
             end
         end
     end
-end
 
-# We shouldn't test StdLib code here, so no BlasFloat.
-@testset "vector normalization $T" for T in (BigFloat, Complex{BigFloat})
-    m = round(-log10(eps(real(T))) / 3)
-    A = T.([1 0 10.0^(-2m); 1 1 10.0^(-m); 10.0^(2m) 10.0^m 1])
-    E, V = eigen!(copy(A), scale = true)
-    tol = 10
-    u = eps(real(T))
-    n = size(A, 1)
-    for j in 1:n
-        v = V[:, j]
-        @test abs(norm(v, 2) - 1) / (n * u) < tol
+    let T = Complex{BigFloat}
+        n = 10
+        # FIXME: should protect against accidental poor condition
+        A = rand(T, n, n)
+        for (w, f) in zip([:bare, :hermitian], [identity, Hermitian])
+            @testset "wrappers $w $T" begin
+                Awrk = f(A)
+                E = eigen(Awrk, sortby = eigsortby)
+                @test norm(Awrk * E.vectors - E.vectors * Diagonal(E.values)) < sqrt(eps(real(T)))
+                v = eigvecs(Awrk, sortby = eigsortby)
+                _chkeigvecs(E.vectors, v, w != :bare)
+                λ = eigvals(Awrk, sortby = eigsortby)
+                @test λ ≈ E.values
+                if (verbosity[] > 0) && (! (λ ≈ E.values))
+                    @warn "eigval order comparison (eigvals, eigen, diff): "
+                    display(hcat(λ, E.values, λ .- E.values))
+                    println()
+                end
+            end
+        end
     end
+
+
+    # This section tests compatibility with Julia PR #38483 which was reverted.
+    # It should be rewritten but is kept to facilitate study of questionable cases.
+    if ((VERSION > v"1.7.0-DEV.976") && (VERSION < v"1.7.0-beta3.37"))
+        for (T, Tref) in ((Complex{BigFloat}, ComplexF64), (BigFloat, Float64))
+            @testset "extended eigen() $T" begin
+                n = 10
+                Aref = rand(Tref, n, n)
+                A = T.(Aref)
+                old = precision(real(T))
+                @assert old >= 53
+                if T <: Real
+                    Eref1 = eigen(Aref, jvl = true)
+                    # we convert to complex for condition nrs, so this is a fairer check
+                    Eref2 = eigen(Aref .+ 0im, jvl = true, jce = true, jcv = true)
+                else
+                    Eref1 = eigen(Aref, jvl = true, jce = true, jcv = true)
+                    Eref2 = Eref1
+                end
+                setprecision(real(T), 53) do
+                    E = eigen(A, jvl = true, jce = true, jcv = true)
+                    @test norm(E.vectorsl' * A - Diagonal(E.values) * E.vectorsl') < sqrt(eps(real(T)))
+                    if verbosity[] > 0
+                        @info "eigval comparison (trial, ref, diff): "
+                        display(hcat(E.values, Eref1.values, E.values .- Eref1.values))
+                        println()
+                    end
+                    @test sorteig!(E.values) ≈ sorteig!(Eref1.values)
+                    # stdlib inverts condition nrs for real matrices (WTF?)
+                    # if we switch to the real forms, we would need this:
+                    # rconde = (Tref <: Real) ? (1.0 ./ Eref1.rconde) : Eref1.rconde
+                    # rcondv = (Tref <: Real) ? (1.0 ./ Eref1.rcondv) : Eref1.rcondv
+                    rconde = Eref2.rconde
+                    rcondv = Eref2.rcondv
+                    @test _chkrcond(E.rconde, rconde, 0.1)
+                    # CHECKME: we should not need to be so lenient.
+                    # The nasty cases are not common (empirically 1 vector in < 10% of 10x10),
+                    # but nightlys on Github are good at finding them.
+                    # This accuracy is sufficient for typical applications.
+                    @test _chkrcond(E.rcondv, rcondv, 5.0)
+                    _chkeigvecs(Eref1.vectors, E.vectors, false)
+                    _chkeigvecs(Eref1.vectorsl, E.vectorsl, false)
+                end
+            end
+        end
+    end
+
+    # We shouldn't test StdLib code here, so no BlasFloat.
+    @testset "vector normalization $T" for T in (BigFloat, Complex{BigFloat})
+        m = round(-log10(eps(real(T))) / 3)
+        A = T.([1 0 10.0^(-2m); 1 1 10.0^(-m); 10.0^(2m) 10.0^m 1])
+        E, V = eigen!(copy(A), scale = true)
+        tol = 10
+        u = eps(real(T))
+        n = size(A, 1)
+        for j in 1:n
+            v = V[:, j]
+            @test abs(norm(v, 2) - 1) / (n * u) < tol
+        end
+    end
+
 end

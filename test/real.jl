@@ -21,38 +21,6 @@ function checkblocks(A::StridedMatrix; debug = false)
     return isok
 end
 
-# This only applies to standard forms w/ co-sorted eigenvals
-function checkeigvals(
-        A::StridedMatrix{T}, w::StridedVector, tol; debug = false
-    ) where {T <: Real}
-    n = size(A, 1)
-    ulp = eps(T)
-    tiny = GenericSchur.safemin(T)
-    isok = true
-    for j in 1:n
-        isok &= (A[j, j] == real(w[j]))
-    end
-    if n > 1
-        if A[2, 1] == 0
-            isok &= (imag(w[1]) == 0)
-        end
-        if A[n, n - 1] == 0
-            isok &= (imag(w[n]) == 0)
-        end
-    end
-    for j in 1:(n - 1)
-        if A[j + 1, j] != 0
-            t = sqrt(abs(A[j + 1, j])) * sqrt(abs(A[j, j + 1]))
-            cmp = max(ulp * t, tiny)
-            isok &= (abs(imag(w[j]) - t) / cmp < tol)
-            isok &= (abs(imag(w[j + 1]) + t) / cmp < tol)
-        elseif (j > 1) && (A[j + 1, j] == 0) && (A[j, j - 1] == 0)
-            isok &= (imag(w[j]) == 0)
-        end
-    end
-    return isok
-end
-
 function schurtest(
         A::Matrix{T}, tol; normal = false, baddec = false, vecs = true,
     ) where {T <: Real}

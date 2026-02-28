@@ -13,13 +13,12 @@ using Aqua
 
 const piracy = GenericSchur._get_piracy()
 
-Aqua.test_all(GenericSchur; piracies = !piracy)
-
 _vbst = parse(Int, get(ENV, "TEST_VERBOSITY", "0"))
 const verbosity = Ref(_vbst)
 
-if parse(Int, get(ENV, "TEST_RESEEDRNG", "0")) != 0
-    let seed = round(Int, 1024 * rand(RandomDevice()))
+env_seed = parse(Int, get(ENV, "TEST_RESEED_RNG", "-1"))
+if  env_seed >= 0
+    let seed = (env_seed > 0) ? env_seed : round(Int, 1024 * rand(RandomDevice()))
         @info "rng seed is $seed"
         Random.seed!(seed)
     end
@@ -27,28 +26,22 @@ end
 
 include("testfuncs.jl")
 
-# temporarily up front
-include("generalized.jl")
-include("gordschur.jl")
+@testset "real nonsymmetric EP" verbose = true include("real.jl")
 
-include("complex.jl")
+@testset "complex nonsymmetric EP" verbose = true include("complex.jl")
 
-if piracy
-    include("wrappers.jl")
-# else
-    # should be handled by Aqua
-end
+@testset "generalized EP" verbose = true include("generalized.jl")
 
-include("symtridiag.jl")
-include("balance.jl")
-include("real.jl")
-#include("complex.jl")
+@testset "Hermitian EP" verbose = true include("symtridiag.jl")
+@testset "balancing" verbose = true include("balance.jl")
 
-include("ordschur.jl")
+@testset "reordering Schur" verbose = true include("ordschur.jl")
+@testset "reordering generalized Schur" verbose = true include("gordschur.jl")
 
-# include("generalized.jl")
-# include("gordschur.jl")
+@testset "error handling" verbose = true include("errors.jl")
 
-include("errors.jl")
+@testset "wrappers" verbose = true include("wrappers.jl")
+
+@testset "Aqua" verbose = true Aqua.test_all(GenericSchur; piracies = !piracy)
 
 end # module
