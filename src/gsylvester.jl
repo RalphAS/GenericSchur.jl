@@ -47,13 +47,7 @@ function trsylvester!(
     )
 
     rtyone = one(real(T))
-    rtyzero = zero(real(T))
     scale = rtyone
-    scaloc = rtyone
-    dif = rtyzero
-    cone = one(T)
-    rdsum = rtyone
-    rdscale = rtyzero
     # ztgsyl notes:
     # ijob 0: solve only; 1: solve & look-ahead dif; 2: solve & 1-est dif
     #      3: only look-ahead dif; 4: only 1-est dif
@@ -67,17 +61,20 @@ function trsylvester!(
     #   zero out C,F
     #   call solver w/ ifunc
     #   if solving, restore C,F
+    perturbed = false
     for j in 1:n
         for i in m:-1:1
             # build 2x2 problem
             Z = [A[i, i] -B[j, j]; D[i, i] -E[j, j]]
             rhs = [C[i, j]; F[i, j]]
-            x, unperturbed, scl = _safe_lu_solve!(Z, rhs)
+            x, scale, perturbed = _safe_lu_solve!(Z, rhs)
             C[i, j] = x[1]
             F[i, j] = x[2]
-            if scl != 1
-                lmul!(view(C, 1:m, k), scl)
-                lmul!(view(F, 1:m, k), scl)
+            if scale != 1
+                for k in 1:n
+                    lmul!(view(C, 1:m, k), scale)
+                    lmul!(view(F, 1:m, k), scale)
+                end
             end
             # substitute R[i,j], L[i,j] into remaining eq
             if i > 1
@@ -92,7 +89,7 @@ function trsylvester!(
             end
         end
     end
-    return C, F, scale
+    return C, F, scale, perturbed
 end
 
 """
@@ -130,19 +127,21 @@ function adjtrsylvester!(
     )
 
     scale = one(real(T))
-    scaloc = one(real(T))
-    dif = zero(real(T))
-    cone = one(T)
+    perturbed = false
     for i in 1:m
         for j in n:-1:1
             # build 2x2 problem
             Z = [A[i, i]' D[i, i]'; -B[j, j]' -E[j, j]']
             rhs = [C[i, j]; F[i, j]]
-            # FIXME: use safe version and update scale
-            fZ = lu(Z)
-            x = fZ \ rhs
+            x, scale, perturbed = _safe_lu_solve!(Z, rhs)
             C[i, j] = x[1]
             F[i, j] = x[2]
+            if scale != 1
+                for k in 1:n
+                    lmul!(view(C, 1:m, k), scale)
+                    lmul!(view(F, 1:m, k), scale)
+                end
+            end
             # substitute R[i,j], L[i,j] into remaining eq
             for jj in 1:(j - 1)
                 F[i, jj] += x[1] * B[jj, j]' + x[2] * E[jj, j]'
@@ -152,5 +151,5 @@ function adjtrsylvester!(
             end
         end
     end
-    return C, F, scale
+    return C, F, scale, perturbed
 end

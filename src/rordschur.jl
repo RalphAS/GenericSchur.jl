@@ -191,7 +191,7 @@ function _swap1or2(T::AbstractMatrix{Ty}, Z, j1, n1, n2) where {Ty <: Real}
         smallnum = floatmin(Ty) / eps(Ty)
         thresh = max(10 * eps(Ty) * dnorm, smallnum)
         # solve T₁₁ X - X T₂₂ = scale T₁₂
-        X, xnorm, scale, ok1 = _syl1or2(
+        X, xnorm, scale, _ = _syl1or2(
             view(D, 1:n1, 1:n1),
             view(D, (n1 + 1):nd, (n1 + 1):nd),
             view(D, 1:n1, (n1 + 1):nd)
@@ -310,9 +310,9 @@ function _syl1or2(Tl::AbstractMatrix{T}, Tr, B) where {T}
         if β <= smallnum
             τ1 = smallnum
             β = smallnum
-            unperturbed = false
+            perturbed = true
         else
-            unperturbed = true
+            perturbed = false
         end
         scale = one(T)
         γ = abs(B[1, 1])
@@ -323,7 +323,7 @@ function _syl1or2(Tl::AbstractMatrix{T}, Tr, B) where {T}
         xnorm = abs(X[1, 1])
     elseif n1 == 2 && n2 == 2
         # solve equivalent 4x4 w/ protected complete pivoting
-        unperturbed = true
+        perturbed = false
         smin = max(maximum(abs.(Tr)), maximum(abs.(Tl)))
         smin = max(epst * smin, smallnum)
         TT = zeros(T, 4, 4)
@@ -368,7 +368,7 @@ function _syl1or2(Tl::AbstractMatrix{T}, Tr, B) where {T}
             end
             jpiv[i] = jpsv
             if abs(TT[i, i]) < smin
-                unperturbed = false
+                perturbed = true
                 TT[i, i] = smin
             end
             for j in (i + 1):4
@@ -380,7 +380,7 @@ function _syl1or2(Tl::AbstractMatrix{T}, Tr, B) where {T}
             end
         end
         if abs(TT[4, 4]) < smin
-            unperturbed = false
+            perturbed = true
             TT[4, 4] = smin
         end
         scale = one(T)
@@ -424,9 +424,9 @@ function _syl1or2(Tl::AbstractMatrix{T}, Tr, B) where {T}
         # solve 2x2 w/ protected complete pivoting
         a, ipiv = findmax(abs.(tmp))
         u11 = tmp[ipiv]
-        unperturbed = true
+        perturbed = false
         if a <= smin
-            unperturbed = false
+            perturbed = true
             u11 = smin
         end
         locu12, locl21, locu22 = _syl2x2_inds(ipiv)
@@ -435,7 +435,7 @@ function _syl1or2(Tl::AbstractMatrix{T}, Tr, B) where {T}
         u22 = tmp[locu22] - u12 * l21
         xswap, bswap = _syl2x2_swaps(ipiv)
         if abs(u22) <= smin
-            unperturbed = false
+            perturbed = true
             u22 = smin
         end
         if bswap
@@ -462,7 +462,7 @@ function _syl1or2(Tl::AbstractMatrix{T}, Tr, B) where {T}
             xnorm = max(abs(X[1, 1]), abs(X[2, 1]))
         end
     end
-    return X, xnorm, scale, unperturbed
+    return X, xnorm, scale, perturbed
 end
 @inline function _syl2x2_inds(i)
     # locu12, locl21, locu22
@@ -794,7 +794,7 @@ function _swap1or2!(
         # S₁₁ R - L S₂₂ = γ S₁₂
         # T₁₁ R - L T₂₂ = γ T₁₂
         i2 = n1 + 1
-        XR, XL, _, scale, unpert = _syl1or2(
+        XR, XL, _, scale, pert = _syl1or2(
             view(S, 1:n1, 1:n1),
             view(S, i2:m, i2:m),
             view(S, 1:n1, i2:m),
@@ -802,7 +802,7 @@ function _swap1or2!(
             view(T, i2:m, i2:m),
             view(T, 1:n1, i2:m)
         )
-        @mydebug unpert || println("  numerically singular Sylvester was perturbed")
+        @mydebug pert && println("  numerically singular Sylvester was perturbed")
 
         # use solution to get swapping transformations
         LI = vcat(-XL, scale * I(n2))
@@ -1080,12 +1080,12 @@ function _syl1or2(A::AbstractMatrix{Ty}, B, C, D, E, F) where {Ty}
 
     K = [kron(I(n2), A) kron(-B', I(n1)); kron(I(n2), D) kron(-E', I(n1))]
     rl = vcat(vec(C), vec(F))
-    rl, unperturbed, scale = _safe_lu_solve!(K, rl)
+    rl, scale, perturbed = _safe_lu_solve!(K, rl)
     xnorm = maximum(abs, rl)
     nn = n1 * n2
     R = reshape(rl[1:nn], n1, n2)
     L = reshape(rl[(nn + 1):end], n1, n2)
-    return R, L, xnorm, scale, unperturbed
+    return R, L, xnorm, scale, perturbed
 end
 
 # this should not be needed (method used for complex should suffice)

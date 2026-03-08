@@ -40,7 +40,7 @@ function trsylvester!(A::StridedMatrix{T}, B::StridedMatrix{T}, C::StridedVecOrM
     smin = max(small, tiny * norm(A, Inf) * norm(B, Inf))
 
     isgn = possign ? one(real(T)) : -one(real(T))
-    ierr = 0
+    perturbed = false
     for l in 1:n
         for k in m:-1:1
             # FIXME: these should be dotu(), but I can't find anything usable in stdlib::LA
@@ -54,7 +54,7 @@ function trsylvester!(A::StridedMatrix{T}, B::StridedMatrix{T}, C::StridedVecOrM
             if da11 <= smin
                 a11 = smin
                 da11 = smin
-                ier = 1
+                perturbed = true
             end
             db = abs1(v)
             if (da11 < 1) && (db > 1)
@@ -71,7 +71,7 @@ function trsylvester!(A::StridedMatrix{T}, B::StridedMatrix{T}, C::StridedVecOrM
             C[k, l] = x11
         end
     end
-    return C, scale
+    return C, scale, perturbed
 end
 
 function adjtrsylvester!(
@@ -105,6 +105,7 @@ function adjtrsylvester!(A::StridedMatrix{T}, B::StridedMatrix{T}, C::StridedVec
     bignum = one(real(T)) / small
     smin = max(small, tiny * norm(A, Inf) * norm(B, Inf))
 
+    perturbed = false
     isgn = possign ? one(real(T)) : -one(real(T))
     for l in n:-1:1
         for k in 1:m
@@ -118,7 +119,7 @@ function adjtrsylvester!(A::StridedMatrix{T}, B::StridedMatrix{T}, C::StridedVec
             if da11 < smin
                 a11 = smin
                 da11 = smin
-                ier = 1
+                perturbed = true
             end
             db = abs1(v)
             if (da11 < 1) && (db > 1)
@@ -134,5 +135,5 @@ function adjtrsylvester!(A::StridedMatrix{T}, B::StridedMatrix{T}, C::StridedVec
             C[k, l] = x11
         end
     end
-    return C, scale
+    return C, scale, perturbed
 end

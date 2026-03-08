@@ -591,7 +591,7 @@ function _enormalize!(v::AbstractMatrix{T}) where {T <: STypes}
 end
 
 """
-`x, unperturbed, scale = _safe_lu_solve!(A,b)`
+`x, scale, perturbed = _safe_lu_solve!(A,b)`
 
 solve a linear algebraic problem `A * x = b` for a single vector `b`
 using LU decomposition with complete pivoting, scaling to mitigate overflow,
@@ -601,7 +601,7 @@ Destroys `A` and overwrites `b` with the solution `x`.
 """
 function _safe_lu_solve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
     n = checksquare(A)
-    unperturbed = true
+    perturbed = false
     RT = real(T)
     smallnum = floatmin(RT) / eps(RT)
     smin = maximum(abs, A)
@@ -638,7 +638,7 @@ function _safe_lu_solve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
         end
         jpiv[i] = jpsv
         if abs(A[i, i]) < smin
-            unperturbed = false
+            perturbed = true
             A[i, i] = smin
         end
         for j in (i + 1):n
@@ -650,7 +650,7 @@ function _safe_lu_solve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
         end
     end
     if abs(A[n, n]) < smin
-        unperturbed = false
+        perturbed = true
         A[n, n] = smin
     end
     jpiv[n] = n
@@ -682,7 +682,7 @@ function _safe_lu_solve!(A::AbstractMatrix{T}, b::AbstractVector{T}) where {T}
             b[n - i], b[jj] = b[jj], b[n - i]
         end
     end
-    return b, unperturbed, scale
+    return b, scale, perturbed
 end
 
 # Triangular solver used by real eigvecs() (standard and generalized).
@@ -743,7 +743,7 @@ function _xsolve(a, A::AbstractMatrix{Ty}, d::AbstractVector{Ty}, b, B, smin) wh
         rmul!(B, t1)
         x = B
     else
-        x, _, s = _safe_lu_solve!(a * A - Diagonal(complex(b) * d), B)
+        x, s, _ = _safe_lu_solve!(a * A - Diagonal(complex(b) * d), B)
     end
     xnorm = norm(x)
     return s, x, xnorm, perturbed
