@@ -26,6 +26,7 @@ function ggschur!(
     else
         scaleA = false
         scaleB = false
+        cscale = cscaleb = anrm = bnrm = one(Ty)
     end
     # maybe balance here
 
@@ -376,7 +377,7 @@ function _gqz!(
             wr *= scale
 
             # check for two consecutive small subdiagonals
-            local f1, _istart
+            _istart = -1 # dummy init i.l.o. local _istart
             gotit = false
             for j in (ilast - 1):-1:(ifirst + 1)
                 _istart = j

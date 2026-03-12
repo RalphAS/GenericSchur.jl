@@ -60,7 +60,7 @@ function _gschur!(
         A::SymTridiagonal{T},
         alg::Algorithm,
         Z::Union{Nothing, AbstractArray} = nothing;
-        maxiter = 30 * size(A, 1)
+        kwargs...
     ) where {T}
     throw(ArgumentError("Unsupported algorithm $alg"))
 end

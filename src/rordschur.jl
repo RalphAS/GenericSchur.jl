@@ -25,7 +25,7 @@ function gordschur!(
             if swap
                 ks += 1
                 if k != ks
-                    ktmp, ks, ok = _trexchange!(T, Z, k, ks)
+                    _, ks, ok = _trexchange!(T, Z, k, ks)
                     ok || throw(IllConditionException(k))
                     @mydebug println("after swap ks=$ks")
                 end
@@ -191,7 +191,7 @@ function _swap1or2(T::AbstractMatrix{Ty}, Z, j1, n1, n2) where {Ty <: Real}
         smallnum = floatmin(Ty) / eps(Ty)
         thresh = max(10 * eps(Ty) * dnorm, smallnum)
         # solve T₁₁ X - X T₂₂ = scale T₁₂
-        X, xnorm, scale, _ = _syl1or2(
+        X, _, scale, _ = _syl1or2(
             view(D, 1:n1, 1:n1),
             view(D, (n1 + 1):nd, (n1 + 1):nd),
             view(D, 1:n1, (n1 + 1):nd)
@@ -273,7 +273,7 @@ function _swap1or2(T::AbstractMatrix{Ty}, Z, j1, n1, n2) where {Ty <: Real}
         if n2 == 2
             # standardize new 2x2 block T₁₁
             Tx = T[j1:j2, j1:j2]
-            G, w1, w2 = _gs2x2!(Tx, 2)
+            G, _, _ = _gs2x2!(Tx, 2)
             lmul!(G, view(T, j1:j2, (j1 + 2):n))
             rmul!(view(T, 1:(j1 - 1), j1:j2), G')
             T[j1:j2, j1:j2] .= Tx
@@ -284,7 +284,7 @@ function _swap1or2(T::AbstractMatrix{Ty}, Z, j1, n1, n2) where {Ty <: Real}
             j3 = j1 + n2
             j4 = j3 + 1
             Tx = T[j3:j4, j3:j4]
-            G, w1, w2 = _gs2x2!(Tx, 2)
+            G, _, _ = _gs2x2!(Tx, 2)
             lmul!(G, view(T, j3:j4, (j3 + 2):n))
             rmul!(view(T, 1:(j3 - 1), j3:j4), G')
             T[j3:j4, j3:j4] .= Tx
@@ -552,6 +552,7 @@ function gordschur!(
     else
         scaleA = false
         scaleB = false
+        cscale = cscaleb = anrm = bnrm = one(Ty)
     end
 
     safmin = floatmin(Ty)
@@ -574,7 +575,7 @@ function gordschur!(
             if doswap
                 ks += 1
                 if k != ks
-                    ktmp, ks, ok = _trexchange!(S, T, Q, Z, k, ks)
+                    _, ks, ok = _trexchange!(S, T, Q, Z, k, ks)
                     ok || throw(IllConditionException(k))
                     @mydebug println("after swap ks=$ks")
                 end
@@ -990,7 +991,7 @@ function _gqz_2x2!(A::AbstractMatrix{Ty}, B) where {Ty <: Real}
         rmul!(A, G)
         rmul!(B, G)
         A[2, 1] = 0
-        B[1:2, 1] = 0
+        B[1:2, 1] .= 0
     elseif abs(B[2, 2]) < ulp
         csr, snr, _ = givensAlgorithm(A[2, 2], A[2, 1])
         G = Givens(1, 2, csr, snr)

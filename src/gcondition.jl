@@ -27,8 +27,6 @@ function _trgsep(
 
     rtyone = one(real(T))
     rtyzero = zero(real(T))
-    scale = rtyone
-    scaloc = rtyone
     dif = rtyzero
     cone = one(T)
     rdsum = rtyone

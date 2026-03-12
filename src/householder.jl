@@ -1,5 +1,5 @@
 import Base: *, eltype, size
-import LinearAlgebra: adjoint, mul!, rmul!, lmul!
+import LinearAlgebra: adjoint, lmul!, mul!, rmul!
 
 # The reflector! code in stdlib has no underflow or accuracy protection
 
@@ -116,9 +116,9 @@ end
 size(H::Householder) = (length(H.v) + 1, length(H.v) + 1)
 size(H::Householder, i::Integer) = i <= 2 ? length(H.v) + 1 : 1
 
-eltype(H::Householder{T}) where {T} = T
+Base.eltype(_H::Householder{T}) where {T} = T
 
-adjoint(H::Householder{T}) where {T} = Adjoint{T, typeof(H)}(H)
+LinearAlgebra.adjoint(H::Householder{T}) where {T} = Adjoint{T, typeof(H)}(H)
 
 function lmul!(H::Householder, A::StridedMatrix)
     m, n = size(A)
@@ -141,7 +141,7 @@ function rmul!(
         A::StridedMatrix{T}, H::Householder,
         x = Vector{T}(undef, size(A, 1))
     ) where {T}
-    m, n = size(A)
+    _, n = size(A)
     size(H, 1) == n || throw(DimensionMismatch(""))
     v = view(H.v, :)
     τ = H.τ

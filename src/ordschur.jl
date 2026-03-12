@@ -149,6 +149,7 @@ function gordschur!(
     else
         scaleA = false
         scaleB = false
+        cscale = cscaleb = anrm = bnrm = one(real(Ty))
     end
     ks = 0
     for k in 1:n

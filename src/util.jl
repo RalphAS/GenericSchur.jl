@@ -239,7 +239,8 @@ function _usolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
                     xscale *= rec
                     xmax *= rec
                 end
-                x[j] = x[j] / tjjs # FIXME: use zladiv scheme
+                # CHECKME: may want zladiv scheme
+                x[j] = x[j] / tjjs
                 xj = abs1(x[j])
             else
                 # A[j,j] = 0; set x to eⱼ, xscale to 0
@@ -444,7 +445,7 @@ function _cusolve!(A::StridedMatrix{T}, n, x, cnorm) where {T}
             else
                 # if dot product was already divided by A[j,j]
                 # compute x[j] = x[j] / A[j,j] - csumj
-                # FIXME: tjjs may not be defined here
+                # CHECKME: tjjs may not be defined here
                 x[j] = x[j] / tjjs - csumj
             end
             xmax = max(xmax, abs1(x[j]))

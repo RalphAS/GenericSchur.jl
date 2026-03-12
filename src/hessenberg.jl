@@ -142,12 +142,13 @@ function _materializeQ!(Q::AbstractMatrix, H::Hessenberg{T}, Zwrk) where {T}
     if H.uplo == 'L'
         return _materializeQ!(Q, H, Val(:L), Zwrk)
     else
-        return _materializeQ!(Q, H, Val(:U), Zwrk)
+        # return _materializeQ!(Q, H, Val(:U), Zwrk)
+        throw(ArgumentError("only implemented for H.uplo='L'"))
     end
 end
 
 function _materializeQ(H::Hessenberg{T}, ::Val{:L}) where {T}
-    H.uplo == 'L' || throw(ArgumentError("only implemented for uplo='L'"))
+    H.uplo == 'L' || throw(ArgumentError("method is inconsistent with uplo != 'L'"))
     A = copy(H.Q.factors)
     n = checksquare(A)
     # shift reflectors one column rightwards
@@ -165,7 +166,7 @@ function _materializeQ(H::Hessenberg{T}, ::Val{:L}) where {T}
 end
 
 function _materializeQ!(Q, H::Hessenberg{T}, ::Val{:L}, Atmp) where {T}
-    H.uplo == 'L' || throw(ArgumentError("only implemented for uplo='L'"))
+    H.uplo == 'L' || throw(ArgumentError("method is inconsistent with uplo != 'L'"))
     if Atmp != nothing
         A = Atmp
     else
@@ -195,7 +196,7 @@ end
 
 # alas, stdlib has no QLPackedQ
 function _materializeQ(H::Hessenberg{T}, ::Val{:U}) where {T}
-    H.uplo == 'U' || throw(ArgumentError("only implemented for uplo='U'"))
+    H.uplo == 'U' || throw(ArgumentError("method is inconsistent with uplo != 'U'"))
     A = copy(H.Q.factors)
     n = checksquare(A)
     # shift reflectors one column leftwards

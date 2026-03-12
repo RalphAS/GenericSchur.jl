@@ -35,6 +35,7 @@ function ggschur!(
     else
         scaleA = false
         scaleB = false
+        cscale = cscaleb = anrm = bnrm = one(real(Ty))
     end
     # maybe balance here
 
@@ -86,14 +87,14 @@ function _hessenberg!(
     for jc in ilo:(ihi - 2)
         for jr in ihi:-1:(jc + 2)
             # rotate rows jr-1,jr to null A[jr,jc]
-            Gq, r = givens(A, jr - 1, jr, jc)
+            Gq, _ = givens(A, jr - 1, jr, jc)
             lmul!(Gq, A)
             lmul!(Gq, B)
             if wantQ
                 rmul!(Q, Gq')
             end
             # rotate cols jr,jr-1 to null B[jr,jr-1]
-            Gz, r = givens(B', jr, jr - 1, jr)
+            Gz, _ = givens(B', jr, jr - 1, jr)
             rmul!(A, Gz')
             rmul!(B, Gz')
             if wantZ
@@ -408,8 +409,11 @@ function _gqz!(
         end
         @assert !isnan(shift)
 
+        # local f1, _istart # replaced by dummy initialization
+        f1 = one(T)
+        _istart = -1
+
         # check for two consecutive small subdiagonals
-        local f1, _istart
         gotit = false
         for j in (ilast - 1):-1:(ifirst + 1)
             _istart = j

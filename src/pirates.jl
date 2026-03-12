@@ -200,7 +200,7 @@ function LinearAlgebra._ordschur(
         Z::StridedMatrix{Ty},
         select::Union{Vector{Bool}, BitVector}
     ) where {Ty <: STypes}
-    return _ordschur!(copy(T), copy(Z), select)
+    return LinearAlgebra._ordschur!(copy(T), copy(Z), select)
 end
 
 function LinearAlgebra._ordschur(
@@ -208,7 +208,7 @@ function LinearAlgebra._ordschur(
         Q::StridedMatrix{Ty}, Z::StridedMatrix{Ty},
         select::Union{Vector{Bool}, BitVector}
     ) where {Ty <: STypes}
-    return _ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
+    return LinearAlgebra._ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
 end
 
 function LinearAlgebra._ordschur!(

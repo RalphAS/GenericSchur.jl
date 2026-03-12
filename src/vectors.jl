@@ -480,7 +480,7 @@ function _gleigvecs!(
     ip = 0 # 0:real, -1,1:first, second in complex pair
 
     # m, isel (from LAPACK logic) are kept for possible implementation of subset selection
-    m = n
+    # m = n
     isel = 1
 
     for ki in 1:n
@@ -713,6 +713,8 @@ function _geigvecs(
     v = zeros(T, n)
     if size(Z, 1) > 0
         v2 = zeros(T, n)
+    else
+        v2 = nothing
     end
 
     # We use the 1-norms of the strictly upper part of S, P columns
@@ -869,6 +871,8 @@ function _gleigvecs(
     v = zeros(T, n)
     if size(Z, 1) > 0
         v2 = zeros(T, n)
+    else
+        v2 = nothing
     end
 
     # We use the 1-norms of the strictly upper part of S, P columns
@@ -1112,7 +1116,7 @@ function _geigvecs(
             end
         else
             # complex eigenvalue
-            scale1, scale2, wr1, wr2, wi = _ggs_2x2(
+            scale1, _, wr1, _, wi = _ggs_2x2(
                 view(S, (je - 1):je, (je - 1):je),
                 view(P, (je - 1):je, (je - 1):je), safmin * safety
             )
@@ -1346,7 +1350,7 @@ function _gleigvecs(
             xmax = one(Ty)
         else
             # complex eigenvalue
-            scale1, scale2, wr1, wr2, wi = _ggs_2x2(
+            scale1, _, wr1, _, wi = _ggs_2x2(
                 view(S, je:(je + 1), je:(je + 1)),
                 view(P, je:(je + 1), je:(je + 1)), safmin * safety
             )

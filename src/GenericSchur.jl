@@ -1,7 +1,7 @@
 module GenericSchur
 
 # These are introduced here.
-export triangularize, eigvalscond, subspacesep, balance!
+export balance!, eigvalscond, subspacesep, triangularize
 
 VERSION >= v"1.11.0-DEV.469" && eval(
     Meta.parse(
@@ -24,8 +24,8 @@ VERSION >= v"1.11.0-DEV.469" && eval(
 const STypes = Union{AbstractFloat, Complex{T} where {T <: AbstractFloat}}
 
 using LinearAlgebra
-using LinearAlgebra: eigsortby, sorteig!, checksquare, givensAlgorithm, _ordschur!
-using LinearAlgebra: RealHermSymComplexHerm, Algorithm, QRIteration, Givens
+using LinearAlgebra: checksquare, eigsortby, givensAlgorithm, sorteig!
+using LinearAlgebra: Algorithm, Givens, QRIteration, RealHermSymComplexHerm
 using Printf
 
 using Base: require_one_based_indexing
@@ -59,12 +59,15 @@ end
     using Preferences
 end
 
+# use explicit UUIDs in Preferences calls to placate JETLS
+using UUIDs: UUID
+
 # In order to make the API consistent over versions,
 # we define these even when they are no-ops.
-
-function _get_piracy()
-    @static if VERSION >= v"1.6"
-        _piracy_s = @load_preference("piracy", "true")
+@static if VERSION >= v"1.6"
+    function _get_piracy()
+        _piracy_s = load_preference(UUID("c145ed77-6b09-5dd9-b285-bf645a82121e"),
+                                    "piracy", "true")
         if _piracy_s == "true"
             _piracy = true
         elseif _piracy_s == "false"
@@ -73,10 +76,10 @@ function _get_piracy()
             @error("Invalid piracy preference; must be \"true\" or \"false\"")
             _piracy = true
         end
-    else
-        _piracy = true
+        return _piracy
     end
-    return _piracy
+else
+    _get_piracy() = true
 end
 
 const piracy = _get_piracy()
@@ -85,18 +88,20 @@ const piracy = _get_piracy()
     set_piracy!(::Bool)
 
 Convenience wrapper for determining whether piratical `LinearAlgebra` methods will
-be added by this package for future Julia sessions.
+be implemented by `GenericSchur` for future Julia sessions. Uses `Preferences`.
 """
 function set_piracy!(v::Bool)
-    return @static if VERSION >= v"1.6"
+    @static if VERSION >= v"1.6"
         p = _get_piracy()
-        @set_preferences!("piracy" => v ? "true" : "false")
+        set_preferences!(UUID("c145ed77-6b09-5dd9-b285-bf645a82121e"),
+                         "piracy" => v ? "true" : "false")
         if v != p
             @info("Piracy setting changed; restart Julia for this to take effect!")
         end
     else
-        v || @error("piracy is forced for Julia versions < v1.6")
+        v || @error("piracy is obligatory for Julia versions < v1.6")
     end
+    return nothing
 end
 
 if piracy
@@ -176,7 +181,6 @@ _getdata(H::Hessenberg) = H.H.data
 include("householder.jl")
 include("balance.jl")
 
-#
 # portions translated from LAPACK::zlahqr
 # LAPACK Copyright:
 # Univ. of Tennessee
@@ -800,16 +804,17 @@ function gschur!(
         Zwrk::Union{Nothing, Matrix{T}} = nothing,
         kwargs...
     ) where {T <: AbstractFloat}
-    n = checksquare(A)
+    checksquare(A)
     if scale
         scaleA, cscale, anrm = _scale!(A)
     else
         scaleA = false
+        anrm = cscale = one(T)
     end
     H = _hessenberg!(A)
     if wantZ
         if Zarg !== nothing
-            nz = checksquare(Zarg)
+            # defer argument checks to callee
             Z = _materializeQ!(Zarg, H, Zwrk)
         else
             Z = _materializeQ(H)

@@ -7,7 +7,8 @@ function _gschur!(
         A::SymTridiagonal{T},
         alg::DivideAndConquer,
         Z::Union{Nothing, AbstractArray} = nothing;
-        maxiter = 30 * size(A, 1), nqrmax = 25
+        maxiter = 0, # for compatibility only
+        nqrmax = 25
     ) where {T}
     n = size(A, 1)
     if n == 0
@@ -30,11 +31,15 @@ function _gschur!(
     if wantZ
         nz = size(Z, 2)
         (nz == n) || throw(DimensionMismatch("second dimension of Z must match tridiagonal A"))
+        Zwrk0 = similar(Z, n, n) # preallocate
+    else
+        Zwrk0 = zeros(T, n, n)
+        Z = nothing # maybe help the compiler
     end
 
     epsT = eps(T)
     return if n <= small_size
-        @mydebug println("QR for full problem")
+        @mydebug println("QR fallback for (small) full problem")
         _gschur!(A, QRIteration(), Z)
     else
         # if any subdiagonals are negligible, we will
@@ -63,10 +68,10 @@ function _gschur!(
                 orgnrm = max(t1, t2)
                 dvw .*= (1 / orgnrm)
                 evw .*= (1 / orgnrm)
-                Zwrk = similar(Z, m, m)
+                Zwrk = view(Zwrk0, 1:m, 1:m)
                 Zwrk .= I(m)
                 _dcschur_core!(dvw, evw, Zwrk, m, nqrmax)
-                if wantZ
+                if Z != nothing
                     # multiply back into Z
                     Ztmp = copy(view(Z, 1:n, istart:ifinish))
                     mul!(view(Z, 1:n, istart:ifinish), Ztmp, Zwrk)
@@ -79,7 +84,7 @@ function _gschur!(
                 # CHECKME: do we have the same constraint on column(?) dim as STEQR?
                 #          otherwise maybe pass Z or a view directly
                 if wantZ
-                    Zwrk = similar(Z, m, m)
+                    Zwrk = view(Zwrk0, 1:m, 1:m)
                     Zwrk .= I(m)
                 else
                     Zwrk = nothing
@@ -309,9 +314,9 @@ function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
                     # deflation is possible
                     z[nj] = τ
                     z[pj] = 0
-                    reclass = false
+                    # reclass = false
                     if coltype[nj] != coltype[pj]
-                        reclass = true
+                        # reclass = true
                         coltype[nj] = 2
                     end
                     coltype[pj] = 4
@@ -323,20 +328,20 @@ function _dcdeflate!(d::AbstractVector{T}, Q, indexq, ρ, z, n1) where {T}
                     k2 -= 1
                     i = 1
 
-                    k2s = 0 # diagnostic only
+                    @mydebug k2s = 0 # diagnostic only
                     if k2 + i > n
                         indexp[k2 + i - 1] = pj
-                        k2s = k2 + i - 1
+                        @mydebug k2s = k2 + i - 1
                     else
                         while k2 + i <= n
                             if d[pj] < d[indexp[k2 + i]]
                                 indexp[k2 + i - 1] = indexp[k2 + i]
                                 indexp[k2 + i] = pj
-                                k2s = k2 + i
+                                @mydebug k2s = k2 + i
                                 i += 1
                             else
                                 indexp[k2 + i - 1] = pj
-                                k2s = k2 + i - 1
+                                @mydebug k2s = k2 + i - 1
                                 break
                             end
                         end
@@ -577,7 +582,7 @@ function _update_w_n(ii, τ, d::AbstractVector{T}, z, δ, ρinv) where {T}
     return w, erretm, parts_n
 end
 
-function _next_step_n(w, τ, parts, d::AbstractVector{T}, z, δ, ρ, dltlb, dltub, iter) where {T}
+function _next_step_n(w, τ, parts, d::AbstractVector{T}, δ, dltlb, dltub, iter) where {T}
     n = length(d)
     dψ, dϕ = parts.dψ, parts.dϕ
     c = w - δ[n - 1] * dψ - δ[n] * dϕ
@@ -748,7 +753,7 @@ function _next_step(i, ii, niter, w, τ, parts, switch3, origin_at_i, switch, d,
             zz[3] = z[iip1]^2
         end
         zz[2] = z[ii]^2
-        η, converged = _dcnewton(niter, origin_at_i, c, view(δ, iim1:iip1), zz, w)
+        η, _ = _dcnewton(niter, origin_at_i, c, view(δ, iim1:iip1), zz, w)
     end
     if w * η > 0
         # fall back to Newton if misled by roundoff
@@ -810,7 +815,7 @@ function _dcroot!(n, i, d, z, δ, ρ)
 
         niter += 1
 
-        η = _next_step_n(w, τ, parts_n, d, z, δ, ρ, dltlb, dltub, niter)
+        η = _next_step_n(w, τ, parts_n, d, δ, dltlb, dltub, niter)
         δ .= δ .- η
         τ += η
         w, erretm, parts_n = _update_w_n(ii, τ, d, z, δ, ρinv)
@@ -827,7 +832,7 @@ function _dcroot!(n, i, d, z, δ, ρ)
             else
                 dltub = min(dltub, τ)
             end
-            η = _next_step_n(w, τ, parts_n, d, z, δ, ρ, dltlb, dltub, niter)
+            η = _next_step_n(w, τ, parts_n, d, δ, dltlb, dltub, niter)
             δ .= δ .- η
             τ += η
             w, erretm, parts_n = _update_w_n(ii, τ, d, z, δ, ρinv)
@@ -872,7 +877,7 @@ function _dcroot!(n, i, d, z, δ, ρ)
         if w <= 0
             dltlb = max(dltlb, τ)
         else
-            dltbu = min(dltub, τ)
+            dltub = min(dltub, τ)
         end
 
         niter += 1
@@ -902,7 +907,7 @@ function _dcroot!(n, i, d, z, δ, ρ)
             if w <= 0
                 dltlb = max(dltlb, τ)
             else
-                dltbu = min(dltub, τ)
+                dltub = min(dltub, τ)
             end
             η = _next_step(i, ii, niter, w, τ, parts, switch3, origin_at_i, switch, d, z, δ, ρ, dltlb, dltub)
             δ .= δ .- η
@@ -1057,6 +1062,7 @@ function _dcnewton(kniter, origin_at_i, ρ, d::AbstractVector{T}, z, f_init) whe
     else
         dscale = d
         zscale = z
+        sclinv = one(T)
     end
     fc = zero(T)
     df = zero(T)
@@ -1086,7 +1092,7 @@ function _dcnewton(kniter, origin_at_i, ρ, d::AbstractVector{T}, z, f_init) whe
     # Gragg-Thornton-Warner cubic convergent iteration
     iter = niter + 1
     converged = false
-    for niter in iter:maxit
+    for _ in iter:maxit
         if origin_at_i
             t1 = dscale[2] - τ
             t2 = dscale[3] - τ
