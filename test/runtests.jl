@@ -17,7 +17,7 @@ _vbst = parse(Int, get(ENV, "TEST_VERBOSITY", "0"))
 const verbosity = Ref(_vbst)
 
 env_seed = parse(Int, get(ENV, "TEST_RESEED_RNG", "-1"))
-if  env_seed >= 0
+if env_seed >= 0
     let seed = (env_seed > 0) ? env_seed : round(Int, 1024 * rand(RandomDevice()))
         @info "rng seed is $seed"
         Random.seed!(seed)

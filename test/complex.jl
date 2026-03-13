@@ -83,7 +83,6 @@ function hesstest(A::Hermitian{T}, tol) where {T <: Complex}
 end
 
 
-
 Random.seed!(1234)
 
 @testset "Hessenberg $T" for T in [ComplexF64, Complex{Float16}]

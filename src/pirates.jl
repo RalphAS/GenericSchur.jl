@@ -47,8 +47,9 @@ function LinearAlgebra.eigvecs(
     return v
 end
 
-function LinearAlgebra.eigvecs(S::GeneralizedSchur{T}; left::Bool = false
-) where {T <: STypes}
+function LinearAlgebra.eigvecs(
+        S::GeneralizedSchur{T}; left::Bool = false
+    ) where {T <: STypes}
     if left
         v = _gleigvecs(S.S, S.T, S.Q)
     else

@@ -66,8 +66,10 @@ using UUIDs: UUID
 # we define these even when they are no-ops.
 @static if VERSION >= v"1.6"
     function _get_piracy()
-        _piracy_s = load_preference(UUID("c145ed77-6b09-5dd9-b285-bf645a82121e"),
-                                    "piracy", "true")
+        _piracy_s = load_preference(
+            UUID("c145ed77-6b09-5dd9-b285-bf645a82121e"),
+            "piracy", "true"
+        )
         if _piracy_s == "true"
             _piracy = true
         elseif _piracy_s == "false"
@@ -93,8 +95,10 @@ be implemented by `GenericSchur` for future Julia sessions. Uses `Preferences`.
 function set_piracy!(v::Bool)
     @static if VERSION >= v"1.6"
         p = _get_piracy()
-        set_preferences!(UUID("c145ed77-6b09-5dd9-b285-bf645a82121e"),
-                         "piracy" => v ? "true" : "false")
+        set_preferences!(
+            UUID("c145ed77-6b09-5dd9-b285-bf645a82121e"),
+            "piracy" => v ? "true" : "false"
+        )
         if v != p
             @info("Piracy setting changed; restart Julia for this to take effect!")
         end

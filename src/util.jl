@@ -706,7 +706,7 @@ function _xsolve(a, A::AbstractMatrix{Ty}, d::AbstractVector{Ty}, b, B, smin) wh
     smin = max(smin, small)
     perturbed = false
     if na == 1
-        csr = a * A[1,1] - real(b) * d[1]
+        csr = a * A[1, 1] - real(b) * d[1]
         csi = -imag(b) * d[1]
         cnorm = abs(csr) + abs(csi)
         if cnorm < smin
@@ -727,7 +727,7 @@ function _xsolve(a, A::AbstractMatrix{Ty}, d::AbstractVector{Ty}, b, B, smin) wh
     cmax = zero_t
     for j in 1:na
         for i in 1:na
-            z = a * A[i,j] + 0im
+            z = a * A[i, j] + 0im
             if i == j
                 z -= b * d[i]
             end

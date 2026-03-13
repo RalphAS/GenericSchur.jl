@@ -9,7 +9,7 @@ geigvecs(S; left::Bool = false)
 Compute eigenvectors from a Schur (or generalized Schur) decomposition `S`.
 Left eigenvectors are produced if so specified, otherwise right ones.
 """
-function geigvecs( S::Schur{T}; left::Bool = false) where {T <: STypes}
+function geigvecs(S::Schur{T}; left::Bool = false) where {T <: STypes}
     if left
         v = _gleigvecs!(S.T, S.Z)
     else
@@ -19,8 +19,9 @@ function geigvecs( S::Schur{T}; left::Bool = false) where {T <: STypes}
     return v
 end
 
-function geigvecs(S::GeneralizedSchur{T}; left::Bool = false
-) where {T <: STypes}
+function geigvecs(
+        S::GeneralizedSchur{T}; left::Bool = false
+    ) where {T <: STypes}
     if left
         v = _gleigvecs(S.S, S.T, S.Q)
     else
@@ -178,11 +179,11 @@ function _geigvecs!(
             end
             continue
         end
-        if (ki > 1) && (T[ki, ki-1] != 0)
+        if (ki > 1) && (T[ki, ki - 1] != 0)
             ip = -1
         end
         wr = T[ki, ki]
-        wi = ip == 0 ? zero(Ty) : sqrt(abs(T[ki, ki-1])) * sqrt(abs(T[ki-1, ki]))
+        wi = ip == 0 ? zero(Ty) : sqrt(abs(T[ki, ki - 1])) * sqrt(abs(T[ki - 1, ki]))
         smin = max(ulp * (abs(wr) + abs(wi)), smallnum)
 
         if ip == 0
@@ -193,7 +194,7 @@ function _geigvecs!(
 
             # form right hand side
             v[ki] = one_t
-            v[1:ki - 1] .= -T[1:ki - 1, ki]
+            v[1:(ki - 1)] .= -T[1:(ki - 1), ki]
             jnxt = ki - 1
             for j in (ki - 1):-1:1
                 j > jnxt && continue
@@ -206,8 +207,10 @@ function _geigvecs!(
                 if j1 == j2
                     # 1x1 block
                     vt1[1] = v[j]
-                    vscale, x, t1 = _xsolve(one_t, view(T, j:j, j:j), [one_t],
-                                            wr + 0im, vt1, smin)
+                    vscale, x, t1 = _xsolve(
+                        one_t, view(T, j:j, j:j), [one_t],
+                        wr + 0im, vt1, smin
+                    )
                     # scale to avoid overflow
                     if (t1 > one_t) && tnorms[j] > bignum / t1
                         x[1] /= t1
@@ -218,16 +221,18 @@ function _geigvecs!(
                     end
                     v[j] = x[1]
                     # update rhs
-                    for i in 1:j-1
+                    for i in 1:(j - 1)
                         v[i] = v[i] - x[1] * T[i, j]
                     end
                 else
                     # 2x2 block
-                    vt2 .= v[j-1:j]
-                    vscale, x, t1 = _xsolve(one_t, view(T, j-1:j, j-1:j), [one_t, one_t],
-                                            wr + 0im, vt2, smin)
+                    vt2 .= v[(j - 1):j]
+                    vscale, x, t1 = _xsolve(
+                        one_t, view(T, (j - 1):j, (j - 1):j), [one_t, one_t],
+                        wr + 0im, vt2, smin
+                    )
                     if (t1 > one_t)
-                        β = max(tnorms[j-1], tnorms[j])
+                        β = max(tnorms[j - 1], tnorms[j])
                         if β > bignum / t1
                             x[1] /= t1
                             x[2] /= t1
@@ -239,7 +244,7 @@ function _geigvecs!(
                     end
                     v[j - 1] = x[1]
                     v[j] = x[2]
-                    for i in 1:j-2
+                    for i in 1:(j - 2)
                         v[i] = (v[i] - x[1] * T[i, j - 1] - x[2] * T[i, j])
                     end
                 end
@@ -261,7 +266,7 @@ function _geigvecs!(
         else
             # complex right eigvec
             # initial solve (corner)
-            if abs(T[ki - 1, ki]) >= abs(T[ki, ki-1])
+            if abs(T[ki - 1, ki]) >= abs(T[ki, ki - 1])
                 v[ki - 1] = one_t
                 v[ki] = im * wi / T[ki - 1, ki]
             else
@@ -270,8 +275,10 @@ function _geigvecs!(
             end
             # form RHS
             for i in 1:(ki - 2)
-                v[i] = (-real(v[ki-1]) * T[i, ki - 1]
-                        - im * imag(v[ki]) * T[i, ki])
+                v[i] = (
+                    -real(v[ki - 1]) * T[i, ki - 1]
+                        - im * imag(v[ki]) * T[i, ki]
+                )
             end
             # vi[1:ki - 2] .=  -vi[ki] * T[1:ki - 2, ki]
             # solve upper quasi-triangular system
@@ -281,15 +288,17 @@ function _geigvecs!(
                 j1 = j
                 j2 = j
                 jnxt = j - 1
-                if (j > 1) && (T[j, j-1] != 0)
+                if (j > 1) && (T[j, j - 1] != 0)
                     j1 = j - 1
                     jnxt = j - 2
                 end
                 if j1 == j2
                     # 1x1 diagonal block
                     vt1[1] = v[j]
-                    vscale, x, t1 = _xsolve(one_t, view(T, j:j, j:j), [one_t],
-                                            wr + im * wi, vt1, smin)
+                    vscale, x, t1 = _xsolve(
+                        one_t, view(T, j:j, j:j), [one_t],
+                        wr + im * wi, vt1, smin
+                    )
                     # scale to avoid overflow
                     if (t1 > one_t) && tnorms[j] > bignum / t1
                         x[1] /= t1
@@ -301,14 +310,16 @@ function _geigvecs!(
                     end
                     v[j] = x[1]
                     # update rhs
-                    v[1:j - 1] .= v[1:j - 1] - x[1] * T[1:j - 1, j]
+                    v[1:(j - 1)] .= v[1:(j - 1)] - x[1] * T[1:(j - 1), j]
                 else
                     # 2x2 block
-                    vt2 .= v[j - 1:j]
-                    vscale, x, t1 = _xsolve(one_t, view(T, j-1:j, j-1:j), [one_t, one_t],
-                                            wr + im * wi, vt2, smin)
+                    vt2 .= v[(j - 1):j]
+                    vscale, x, t1 = _xsolve(
+                        one_t, view(T, (j - 1):j, (j - 1):j), [one_t, one_t],
+                        wr + im * wi, vt2, smin
+                    )
                     if (t1 > one_t)
-                        β = max(tnorms[j-1], tnorms[j])
+                        β = max(tnorms[j - 1], tnorms[j])
                         if β > bignum / t1
                             x[1] /= t1
                             x[2] /= t1
@@ -320,8 +331,10 @@ function _geigvecs!(
                     end
                     v[j - 1] = x[1]
                     v[j] = x[2]
-                    v[1:j - 2] .= (v[1:j - 2] - x[1] * T[1:j - 2, j - 1]
-                                   - x[2] * T[1:j - 2, j])
+                    v[1:(j - 2)] .= (
+                        v[1:(j - 2)] - x[1] * T[1:(j - 2), j - 1]
+                            - x[2] * T[1:(j - 2), j]
+                    )
                 end
             end # j loop
             if !have_Z
@@ -401,8 +414,10 @@ function _gleigvecs!(
             (abs1(TT[k, k]) < smin) && (TT[k, k] = smin)
         end
         if ki < n
-            vscale = _cusolve!(view(TT, (ki + 1):n, (ki + 1):n), n - ki,
-                               view(v, (ki + 1):n), tnorms)
+            vscale = _cusolve!(
+                view(TT, (ki + 1):n, (ki + 1):n), n - ki,
+                view(v, (ki + 1):n), tnorms
+            )
             v[ki] = vscale
         else
             v[n] = one(T)
@@ -508,11 +523,11 @@ function _gleigvecs!(
 
             # form right hand side
             v[ki] = one_t
-            v[ki + 1:n] .= -T[ki, ki + 1:n]
+            v[(ki + 1):n] .= -T[ki, (ki + 1):n]
             vmax = one_t
             vcrit = bignum
             jnxt = ki + 1
-            for j in ki + 1:n
+            for j in (ki + 1):n
                 j < jnxt && continue
                 j1 = j
                 j2 = j
@@ -530,9 +545,11 @@ function _gleigvecs!(
                         vmax = one_t
                         vcrit = bignum
                     end
-                    vt1[1] = v[j] - dot(view(T, ki + 1:j - 1, j), view(v, ki + 1:j - 1))
-                    vscale, x, _ = _xsolve(one_t, view(T, j:j, j:j), [one_t],
-                                            wr + 0im, vt1, smin)
+                    vt1[1] = v[j] - dot(view(T, (ki + 1):(j - 1), j), view(v, (ki + 1):(j - 1)))
+                    vscale, x, _ = _xsolve(
+                        one_t, view(T, j:j, j:j), [one_t],
+                        wr + 0im, vt1, smin
+                    )
                     if vscale != one_t
                         rmul!(view(v, ki:n), vscale)
                     end
@@ -548,10 +565,14 @@ function _gleigvecs!(
                         vmax = one_t
                         vcrit = bignum
                     end
-                    vt2 .= (v[j:j + 1]
-                            - view(T, ki + 1:j - 1, j:j + 1)' * view(v, ki + 1:j - 1))
-                    vscale, x, t1 = _xsolve(one_t, view(T, j:j + 1, j:j + 1)',
-                                            [one_t, one_t], wr + 0im, vt2, smin)
+                    vt2 .= (
+                        v[j:(j + 1)]
+                            - view(T, (ki + 1):(j - 1), j:(j + 1))' * view(v, (ki + 1):(j - 1))
+                    )
+                    vscale, x, t1 = _xsolve(
+                        one_t, view(T, j:(j + 1), j:(j + 1))',
+                        [one_t, one_t], wr + 0im, vt2, smin
+                    )
                     # @show norm(T[j-1:j,j-1:j]*x - wr * x - v[j-1:j])
                     if vscale != one_t
                         rmul!(view(v, ki:n), vscale)
@@ -588,14 +609,16 @@ function _gleigvecs!(
             end
             # form RHS
             for i in (ki + 2):n
-                v[i] = (-real(v[ki]) * T[ki, i]
-                        - im * imag(v[ki + 1]) * T[ki + 1, i])
+                v[i] = (
+                    -real(v[ki]) * T[ki, i]
+                        - im * imag(v[ki + 1]) * T[ki + 1, i]
+                )
             end
             # solve upper quasi-triangular system
             vmax = one_t
             vcrit = bignum
             jnxt = ki + 2
-            for j in ki + 1:n
+            for j in (ki + 1):n
                 (j < jnxt) && continue
                 j1 = j
                 j2 = j
@@ -613,9 +636,11 @@ function _gleigvecs!(
                         vmax = one_t
                         vcrit = bignum
                     end
-                    vt1[1] = v[j] - dot(view(T, ki + 2:j - 1, j), view(v, ki + 2:j - 1))
-                    vscale, x, t1 = _xsolve(one_t, view(T, j:j, j:j), [one_t],
-                                            wr - im * wi, vt1, smin)
+                    vt1[1] = v[j] - dot(view(T, (ki + 2):(j - 1), j), view(v, (ki + 2):(j - 1)))
+                    vscale, x, t1 = _xsolve(
+                        one_t, view(T, j:j, j:j), [one_t],
+                        wr - im * wi, vt1, smin
+                    )
 
                     if vscale != one_t
                         rmul!(view(v, ki:n), vscale)
@@ -625,17 +650,21 @@ function _gleigvecs!(
                     vcrit = bignum / vmax
                 else
                     # 2x2 block
-                    β = max(tnorms[j-1], tnorms[j])
+                    β = max(tnorms[j - 1], tnorms[j])
                     if β > vcrit
                         t1 = one_t / vmax
                         rmul!(view(v, ki:n), t1)
                         vmax = one_t
                         vcrit = bignum
                     end
-                    vt2 .= (v[j:j + 1]
-                            - view(T, ki + 2:j - 1, j:j + 1)' * view(v, ki + 2:j - 1))
-                    vscale, x, t1 = _xsolve(one_t, view(T, j:j + 1, j:j + 1)',
-                                            [one_t, one_t], wr - im * wi, vt2, smin)
+                    vt2 .= (
+                        v[j:(j + 1)]
+                            - view(T, (ki + 2):(j - 1), j:(j + 1))' * view(v, (ki + 2):(j - 1))
+                    )
+                    vscale, x, t1 = _xsolve(
+                        one_t, view(T, j:(j + 1), j:(j + 1))',
+                        [one_t, one_t], wr - im * wi, vt2, smin
+                    )
                     if vscale != one_t
                         rmul!(view(v, ki:n), vscale)
                     end
@@ -1094,7 +1123,7 @@ function _geigvecs(
                 s = max(s, (smallnum / abs(sαr)) * min(Bnorm, bigx))
             end
             if lsa || lsb
-                s = min( s, 1 / (safmin * max(one(Ty), abs(a), abs(br))))
+                s = min(s, 1 / (safmin * max(one(Ty), abs(a), abs(br))))
                 if lsa
                     a = ascale * (s * sβ)
                 else
@@ -1197,8 +1226,10 @@ function _geigvecs(
                 Bdiag = [P[j, j]]
             end
             jx = j + na - 1
-            scale, xsum, t1 = _xsolve(a, view(S, j:jx, j:jx), Bdiag, br + im * bi, view(v, j:jx),
-                                      dmin)
+            scale, xsum, t1 = _xsolve(
+                a, view(S, j:jx, j:jx), Bdiag, br + im * bi, view(v, j:jx),
+                dmin
+            )
             if scale < one(Ty)
                 v[1:je] .= scale * v[1:je]
             end
@@ -1331,7 +1362,7 @@ function _gleigvecs(
                 s = max(s, (smallnum / abs(sαr)) * min(Bnorm, bigx))
             end
             if lsa || lsb
-                s = min( s, 1 / (safmin * max(one(Ty), abs(a), abs(br))))
+                s = min(s, 1 / (safmin * max(one(Ty), abs(a), abs(br))))
                 if lsa
                     a = ascale * (s * sβ)
                 else
@@ -1429,8 +1460,10 @@ function _gleigvecs(
             xscale = one(Ty) / max(one(Ty), xmax)
             t1 = max(Snorms[j], Pnorms[j], aa * Snorms[j] + ba * Snorms[j])
             if in2x2
-                t1 = max(t1, Snorms[j + 1], Pnorms[j + 1],
-                         aa * Snorms[j + 1] + ba * Snorms[j + 1])
+                t1 = max(
+                    t1, Snorms[j + 1], Pnorms[j + 1],
+                    aa * Snorms[j + 1] + ba * Snorms[j + 1]
+                )
             end
             if t1 > bignum * xscale
                 v[je:(j - 1)] .= v[je:(j - 1)] * xscale

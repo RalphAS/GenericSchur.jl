@@ -191,107 +191,107 @@ for Ty in [Float64, BigFloat, ComplexF64, Complex{BigFloat}]
 end
 
 if piracy
-# it would be too ugly to rewrite using un-pirated functions
+    # it would be too ugly to rewrite using un-pirated functions
 
-# WARNING: KPTest was adapted from a more thorough validation study.
-# For interesting arguments the tests don't pass as written, but results
-# agree with LAPACK. With benign arguments, however, it is a good
-# test of functionality.
+    # WARNING: KPTest was adapted from a more thorough validation study.
+    # For interesting arguments the tests don't pass as written, but results
+    # agree with LAPACK. With benign arguments, however, it is a good
+    # test of functionality.
 
-# Test with CHK4 matrices from Kågström and Poromaa, LAWN 87, 1994.
-function KPTest(α, β, x, y, dtype, Ty = ComplexF64)
-    Db = I
-    if dtype == 1
-        Da = diagm(0 => Ty.([1, 2, 3, 4, 5])) + α * I
-        atrue = [1, 2, 3, 4, 5] .+ α
-    else
-        Da = diagm(
-            0 => Ty.([1, 1, 1, 1 + α, 1 + α]), 1 => Ty.([-1, 0, 0, 1 + β]),
-            -1 => Ty.([1, 0, 0, -1 - β])
-        )
-        atrue = [1 - 1im, 1 + 1im, 1, 1 + α - (1 + β) * im, 1 + α + (1 + β) * im]
-    end
-    YH = diagm(
-        0 => ones(Ty, 5), 1 => Ty.([0, -y, 0, 0]), 2 => Ty.([-y, y, 0]),
-        3 => Ty.([y, -y]), 4 => Ty.([-y])
-    )
-    X = diagm(
-        0 => ones(Ty, 5), 1 => Ty.([0, x, 0, 0]), 2 => Ty.([-x, -x, 0]),
-        3 => Ty.([-x, -x]), 4 => Ty.([x])
-    )
-    A = YH \ (Da / X)
-    B = YH \ (Db / X)
-    S = GenericSchur.ggschur!(copy(A), copy(B))
-    aest = S.α ./ S.β
-    for j in 1:5
-        λtrue = atrue[j]
-        _, idx = findmin(abs.(aest .- λtrue))
-        sel = falses(5)
-        sel[idx] = true
-        if idx == 1
-            S2 = S
+    # Test with CHK4 matrices from Kågström and Poromaa, LAWN 87, 1994.
+    function KPTest(α, β, x, y, dtype, Ty = ComplexF64)
+        Db = I
+        if dtype == 1
+            Da = diagm(0 => Ty.([1, 2, 3, 4, 5])) + α * I
+            atrue = [1, 2, 3, 4, 5] .+ α
         else
-            S2 = ordschur(S, sel)
+            Da = diagm(
+                0 => Ty.([1, 1, 1, 1 + α, 1 + α]), 1 => Ty.([-1, 0, 0, 1 + β]),
+                -1 => Ty.([1, 0, 0, -1 - β])
+            )
+            atrue = [1 - 1im, 1 + 1im, 1, 1 + α - (1 + β) * im, 1 + α + (1 + β) * im]
         end
-        pl, pr = eigvalscond(S2, 1)
-        sep = subspacesep(S2, 1)
-
-        # known values from construction
-        if dtype == 1 || j == 3
-            y = YH[j, :] # a column vector!
-            x = X[:, j]
-        else
-            if j == 1
-                y = YH[1, :] + im * YH[2, :]
-                x = X[:, 1] + im * X[:, 2]
-            elseif j == 2
-                y = YH[1, :] - im * YH[2, :]
-                x = X[:, 1] - im * X[:, 2]
-            elseif j == 4
-                y = YH[4, :] - im * YH[5, :]
-                x = X[:, 4] - im * X[:, 5]
-            elseif j == 5
-                y = YH[4, :] + im * YH[5, :]
-                x = X[:, 4] + im * X[:, 5]
+        YH = diagm(
+            0 => ones(Ty, 5), 1 => Ty.([0, -y, 0, 0]), 2 => Ty.([-y, y, 0]),
+            3 => Ty.([y, -y]), 4 => Ty.([-y])
+        )
+        X = diagm(
+            0 => ones(Ty, 5), 1 => Ty.([0, x, 0, 0]), 2 => Ty.([-x, -x, 0]),
+            3 => Ty.([-x, -x]), 4 => Ty.([x])
+        )
+        A = YH \ (Da / X)
+        B = YH \ (Db / X)
+        S = GenericSchur.ggschur!(copy(A), copy(B))
+        aest = S.α ./ S.β
+        for j in 1:5
+            λtrue = atrue[j]
+            _, idx = findmin(abs.(aest .- λtrue))
+            sel = falses(5)
+            sel[idx] = true
+            if idx == 1
+                S2 = S
+            else
+                S2 = ordschur(S, sel)
             end
+            pl, pr = eigvalscond(S2, 1)
+            sep = subspacesep(S2, 1)
+
+            # known values from construction
+            if dtype == 1 || j == 3
+                y = YH[j, :] # a column vector!
+                x = X[:, j]
+            else
+                if j == 1
+                    y = YH[1, :] + im * YH[2, :]
+                    x = X[:, 1] + im * X[:, 2]
+                elseif j == 2
+                    y = YH[1, :] - im * YH[2, :]
+                    x = X[:, 1] - im * X[:, 2]
+                elseif j == 4
+                    y = YH[4, :] - im * YH[5, :]
+                    x = X[:, 4] - im * X[:, 5]
+                elseif j == 5
+                    y = YH[4, :] + im * YH[5, :]
+                    x = X[:, 4] + im * X[:, 5]
+                end
+            end
+
+            rcond = (
+                sqrt(abs(dot(y, (A * x)))^2 + abs(dot(y, (B * x)))^2)
+                    / (norm(x) * norm(y'))
+            ) / sqrt(3.0)
+
+            n = 5
+            Inm1 = Matrix{Ty}(I, n - 1, n - 1)
+            Zl = hcat(
+                vcat(λtrue * Inm1, Inm1),
+                vcat(-S2.S[2:n, 2:n], -S2.T[2:n, 2:n])
+            )
+            difl = minimum(svdvals(Zl))
+            if verbosity[] > 0
+                println("λ true $λtrue error $(λtrue - aest[idx])")
+                println("ours   pl $(pl) pr $(pr) sep $(sep)")
+                println("true rcond $rcond fudged $(rcond)  Difl $(difl)")
+            end
+
+            @test abs(log10(pl / rcond)) < 2
+            @test abs(log10(pr / rcond)) < 2
+            @test abs(log10(sep[1] / difl)) < 2
+            @test abs(log10(sep[2] / difl)) < 2
+
         end
+        return
+    end
 
-        rcond = (
-            sqrt(abs(dot(y, (A * x)))^2 + abs(dot(y, (B * x)))^2)
-                / (norm(x) * norm(y'))
-        ) / sqrt(3.0)
-
-        n = 5
-        Inm1 = Matrix{Ty}(I, n - 1, n - 1)
-        Zl = hcat(
-            vcat(λtrue * Inm1, Inm1),
-            vcat(-S2.S[2:n, 2:n], -S2.T[2:n, 2:n])
-        )
-        difl = minimum(svdvals(Zl))
-        if verbosity[] > 0
-            println("λ true $λtrue error $(λtrue - aest[idx])")
-            println("ours   pl $(pl) pr $(pr) sep $(sep)")
-            println("true rcond $rcond fudged $(rcond)  Difl $(difl)")
+    for Ty in [ComplexF64, Complex{BigFloat}]
+        @testset "gen. condition $Ty" begin
+            α = 1.0
+            β = 1.0
+            x = 1.0
+            y = 1.0
+            dtype = 2
+            KPTest(α, β, x, y, dtype, Ty)
         end
-
-        @test abs(log10(pl / rcond)) < 2
-        @test abs(log10(pr / rcond)) < 2
-        @test abs(log10(sep[1] / difl)) < 2
-        @test abs(log10(sep[2] / difl)) < 2
-
     end
-    return
-end
-
-for Ty in [ComplexF64, Complex{BigFloat}]
-    @testset "gen. condition $Ty" begin
-        α = 1.0
-        β = 1.0
-        x = 1.0
-        y = 1.0
-        dtype = 2
-        KPTest(α, β, x, y, dtype, Ty)
-    end
-end
 
 end
