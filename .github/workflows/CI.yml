@@ -42,7 +42,7 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - name: Set Preferences
         run: julia --project .github/set_ci_preferences.jl "${{ matrix.piracy }}"
@@ -61,7 +61,7 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-docdeploy@v1
         env:
