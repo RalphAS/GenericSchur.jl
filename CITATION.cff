@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: >-
+  GenericSchur.jl: Julia package for Schur decomposition of matrices
+  with generic element types
+type: software
+authors:
+- family-names: "Smith"
+  given-names: "Ralph A."
+  orcid: 'https://orcid.org/0009-0007-6792-9016'
+repository-code: "https://github.com/RalphAS/GenericSchur.jl"
