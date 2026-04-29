@@ -5,13 +5,15 @@ real and complex matrices of generic numeric type, i.e. those
 not supported by the LAPACK-based routines in the standard LinearAlgebra
 library. Examples are `BigFloat`, `Float128`, and `DoubleFloat`.
 
-Normally, the `schur!`, `eigvals!`, and `eigen!` functions in the `LinearAlgebra`
+Normally, the `schur!`, `eigvals!`, `eigen!`, and `ordschur!` functions
+in the `LinearAlgebra`
 standard library are overloaded here, and may be accessed through the usual
-`schur`, `eigvals`, and `eigen` wrappers.
+`schur`, `eigvals`, `eigen`, and `ordschur` wrappers.
 
 !!! note "Type piracy"
 	Most users will enjoy the convenience of the functions from `LinearAlgebra`,
-	but these piratical methods may be omitted; see [Preferences](@ref) for details.
+	but these piratical methods may be omitted; see the [Preferences](@ref) section
+	for details.
 
 ## Complex Schur decomposition
 
@@ -32,7 +34,9 @@ S = schur(A)
 The result `S` is a `LinearAlgebra.Schur` object, with the properties `T`,
 `Z=vectors`, and `values`.
 
-The unexported `gschur` and `gschur!` functions are available for types
+The unexported [`GenericSchur.gschur`](@ref) and [`GenericSchur.gschur!`](@ref)
+functions are available
+for use when type piracy is suppressed, and for types
 normally handled by the LAPACK wrappers in `LinearAlgebra`.
 
 The algorithm is essentially the unblocked, serial, single-shift Francis (QR)
@@ -44,7 +48,8 @@ but currently permutation (which would reduce the work) is not.
 The Schur decomposition of a Hermitian (or real symmetric) matrix is identical to
 diagonalization, i.e.
 the upper-triangular factor is diagonal. This package provides such decompositions
-for real-symmetric and complex-Hermitian matrices via `eigen!` etc.
+for real-symmetric and complex-Hermitian matrices via `eigen!`
+(and [`GenericSchur.geigen!`](@ref)) etc.
 In these cases, an `alg` argument
 may be used to select a `LinearAlgebra.QRIteration` or `LinearAlgebra.DivideAndConquer`
 algorithm. The divide-and-conquer scheme takes a long time to compile, but execution
@@ -77,6 +82,7 @@ S = schur(A)
 VR = eigvecs(S)
 VL = eigvecs(S,left=true)
 ```
+or [`GenericSchur.geigvecs`](@ref).
 The results are currently unreliable if the Frobenius norm of `A` is extremely
 small or large, so scale if necessary (also see Balancing, below).
 
@@ -85,7 +91,7 @@ small or large, so scale if necessary (also see Balancing, below).
 The accuracy of eigenvalues and eigenvectors may be improved for some
 matrices by use of a similarity transform which reduces the matrix
 norm.  This is done by default in the `eigen!` method, and may also be
-handled explicitly via the `balance!` function provided here:
+handled explicitly via the [`balance!`](@ref) function provided here:
 ```julia
 Ab, B = balance!(copy(A))
 S = schur(Ab)
@@ -98,24 +104,29 @@ yet exploit this opportunity for reduced workload.
 
 ## Generalized problems
 
-The generalized Schur decomposition is provided [via `schur(A,B)`, or `ggschur!(A,B)`],
-for real and complex element types. No specific implementations are currently provided
-for Hermitian/Symmetric problems.
+The generalized Schur decomposition of matrix pencils is provided via `schur(A,B)`, or
+[`GenericSchur.ggschur!(A,B)`](@ref), for real and complex element types. No specific
+implementations are currently provided for Hermitian/Symmetric problems.
+
+Note that although many nearly singular matrix pencils can be factored and reordered
+with our implementations, accuracy may suffer; for such problems it is best to
+extract the regular part with a Kronecker-like decomposition (see the `MatrixPencils`
+package).
 
 Right and left eigenvectors are available for generalized problems, via
-`eigvecs(S::GeneralizedSchur)`.
+`eigvecs(S::GeneralizedSchur)` and `geigvecs(S::GeneralizedSchur)`.
 
 ## Reordering
 An invariant (viz. deflating) subspace may be extracted via methods of the
 `LinearAlgebra.ordschur` function; see the documentation in the LinearAlgebra stdlib.
-This package provides this for ordinary and generalized Schur factorizations, both
-real and complex element types.
+(The [`GenericSchur.gordschur!`](@ref) function may also be used, especially if type
+piracy is disabled.)  This package provides reordering methods for ordinary and
+generalized Schur factorizations, both real and complex element types.
 
 ## Preferences
-The runtime behavior can be adjusted by use of package
-[Preferences](https://github.com/JuliaPackaging/Preferences.jl).
+The runtime behavior can be adjusted by use of the
+[Preferences](https://github.com/JuliaPackaging/Preferences.jl) package.
 
-### Type piracy
 The `piracy` preference may be set to "true" (the default) or "false" to determine
 whether methods are added to functions such as `LinearAlgebra.schur!`.
 

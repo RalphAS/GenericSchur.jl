@@ -1,6 +1,14 @@
 # This file is part of GenericSchur.jl, released under the MIT "Expat" license
 # Portions derived from LAPACK, see below.
 
+"""
+gordschur!(F::Schur, select) -> Schur
+gordschur!(F::GeneralizedSchur, select) -> GeneralizedSchur
+
+Reorder a Schur decomposition so that the eigenvalues and subspaces corresponding to
+indices set to `true` in the Boolean vector (or `BitVector`) `select` are first. Uses a
+generic implementation.  C.f. `LinearAlgebra.ordschur!`.
+"""
 function gordschur!(F::Schur, select::Union{Vector{Bool}, BitVector})
     T, Z, λ = gordschur!(F.T, F.Z, select)
     return Schur(T, Z, λ)

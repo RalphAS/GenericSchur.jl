@@ -2,7 +2,7 @@
 Most of the user-facing methods are extensions of functions declared in
 LinearAlgebra: `eigen!`, `schur!`, `ordschur!`, `eigvals!`.
 
-Additional exported functions are as follows.
+Additional public functions are as follows.
 
 ## Balancing
 
@@ -35,15 +35,33 @@ eigvalscond
 subspacesep
 ```
 
-## Circumventing normal dispatch
-Mainly for testing purposes, one can invoke the generic methods implemented
-here for LAPACK-compatible matrix types with these methods.
+## Non-piratical functions
+If one opts out of type piracy, the implementations in `GenericSchur` are available
+via the following functions. (Several are not currently exported, but *are*
+considered public API.)
+
+Mainly for testing purposes, one can also invoke the generic methods implemented
+here for LAPACK-compatible matrix types with these.
+
+### Schur decomposition
 ```@docs
 GenericSchur.gschur!
 
 GenericSchur.gschur
 
+GenericSchur.ggschur!
+```
+
+### Eigenvectors
+```@docs
 GenericSchur.geigen!
+
+GenericSchur.geigvecs
+```
+
+### Reordering a Schur factorization
+```@docs
+GenericSchur.gordschur!
 ```
 
 ## Locally defined exceptions

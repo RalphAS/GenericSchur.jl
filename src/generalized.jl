@@ -13,6 +13,12 @@
 # T overwrites B
 # S overwrites A
 
+"""
+ggschur!(A, B) -> S::GeneralizedSchur
+
+Computes the generalized Schur factorization of matrix pair `A,B` using a generic
+implementation. Overwrites `A` and `B`.
+"""
 function ggschur!(
         A::StridedMatrix{Ty}, B::StridedMatrix{Ty};
         wantQ::Bool = true, wantZ::Bool = true,
