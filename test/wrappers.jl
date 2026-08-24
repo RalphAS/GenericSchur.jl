@@ -104,6 +104,7 @@ if piracy
                 for j in 1:n
                     @test vr[:, j] ≈ v[:, n + 1 - j]
                 end
+                # verify default sorting
                 if w in (:hermitian, :symmetric)
                     Er = eigen(Awrk)
                     λr = eigvals(Awrk)
@@ -111,6 +112,15 @@ if piracy
                     @test issorted(λr)
                 end
             end
+            As = SymTridiagonal(rand(T,n), rand(T,n-1))
+            E = eigen(As)
+            λ = eigvals(As)
+            @test issorted(E.values)
+            @test issorted(λ)
+            Er = eigen(As, sortby=revsort)
+            λr = eigvals(As, sortby=revsort)
+            @test Er.values ≈ reverse(E.values)
+            @test λr ≈ reverse(λ)
         end
     end
 
