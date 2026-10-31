@@ -15,6 +15,7 @@ function checkord(A::Matrix{Ty}, tol = 10) where {Ty <: Complex}
     @test all(tril(T2, -1) .== 0)
     @test norm(Z2 * T2 * Z2' - A) / (n * norm(A) * ulp) < tol
     @test norm(I - Z2 * Z2') / (n * ulp) < tol
+    @test all(diag(T2) .== w)
 
     # make sure we got the ones we asked for
     nwanted = count(select)

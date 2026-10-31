@@ -10,12 +10,15 @@ indices set to `true` in the Boolean vector (or `BitVector`) `select` are first.
 generic implementation.  C.f. `LinearAlgebra.ordschur!`.
 """
 function gordschur!(F::Schur, select::Union{Vector{Bool}, BitVector})
-    T, Z, λ = gordschur!(F.T, F.Z, select)
-    return Schur(T, Z, λ)
+    _, _, λ = gordschur!(F.T, F.Z, select)
+    F.values .= λ
+    return F
 end
 function gordschur!(F::GeneralizedSchur, select::Union{Vector{Bool}, BitVector})
-    S, T, α, β, Q, Z = gordschur!(F.S, F.T, F.Q, F.Z, select)
-    return GeneralizedSchur(S, T, α, β, Q, Z)
+    _, _, α, β, _, _ = gordschur!(F.S, F.T, F.Q, F.Z, select)
+    F.α .= α
+    F.β .= β
+    return F
 end
 
 # invariant subspace computations using complex Schur decompositions
