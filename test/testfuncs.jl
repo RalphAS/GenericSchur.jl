@@ -140,3 +140,24 @@ function godunov(T)
     econd = 7.0e16 # condition of the worst ones
     return A, vals, econd
 end
+
+function emptytest(A::Matrix{T}) where {T}
+    n = LinearAlgebra.checksquare(A)
+    n == 0 || throw(ArgumentError("expected empty matrix"))
+    S = GenericSchur.gschur(A)
+    @test size(S.T) == (0,0)
+    @test size(S.Z) == (0,0)
+    @test size(S.values) == (0,)
+end
+
+function emptytest(A::Matrix{T}, B::Matrix{T}) where {T}
+    n = maximum(LinearAlgebra.checksquare(A, B))
+    n == 0 || throw(ArgumentError("expected empty matrices"))
+    S = GenericSchur.ggschur!(A, B)
+    @test size(S.T) == (0,0)
+    @test size(S.Z) == (0,0)
+    @test size(S.S) == (0,0)
+    @test size(S.Q) == (0,0)
+    @test size(S.α) == (0,)
+    @test size(S.β) == (0,)
+end

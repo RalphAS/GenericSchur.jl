@@ -2,7 +2,7 @@
 
 function _hessenberg!(A::StridedMatrix{T}) where {T}
     n = LinearAlgebra.checksquare(A)
-    τ = Vector{T}(undef, n - 1)
+    τ = Vector{T}(undef, max(0, n - 1))
     xwrk = Vector{T}(undef, n)
     for i in 1:(n - 1)
         xi = view(A, (i + 1):n, i)
@@ -151,6 +151,8 @@ function _materializeQ(H::Hessenberg{T}, ::Val{:L}) where {T}
     H.uplo == 'L' || throw(ArgumentError("method is inconsistent with uplo != 'L'"))
     A = copy(H.Q.factors)
     n = checksquare(A)
+    n == 0 && return A
+
     # shift reflectors one column rightwards
     @inbounds for j in n:-1:2
         A[1:(j - 1), j] .= zero(T)
@@ -176,6 +178,8 @@ function _materializeQ!(Q, H::Hessenberg{T}, ::Val{:L}, Atmp) where {T}
     n = checksquare(A)
     nq = checksquare(Q)
     nq == n || throw(ArgumentError("Q must have same size as factors in H"))
+    n == 0 && return Q
+
     # shift reflectors one column rightwards
     @inbounds for j in n:-1:2
         A[1:(j - 1), j] .= zero(T)
@@ -199,6 +203,8 @@ function _materializeQ(H::Hessenberg{T}, ::Val{:U}) where {T}
     H.uplo == 'U' || throw(ArgumentError("method is inconsistent with uplo != 'U'"))
     A = copy(H.Q.factors)
     n = checksquare(A)
+    n == 0 && return A
+
     # shift reflectors one column leftwards
     @inbounds for j in 1:(n - 1)
         for i in 1:(j - 1)

@@ -143,6 +143,10 @@ function _gqz!(
     α = Vector{T}(undef, n)
     β = Vector{T}(undef, n)
 
+    if n == 0
+        return α, β, H, B, Q, Z
+    end
+
     RT = real(T)
     ulp = eps(RT)
     safmin = safemin(RT)

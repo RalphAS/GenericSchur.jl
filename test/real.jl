@@ -123,6 +123,11 @@ end
     rtulp = sqrt(ulp)
     rtulpi = one(T) / rtulp
 
+    @testset "empty" begin
+        A = zeros(T, 0, 0)
+        emptytest(A)
+    end
+
     ens = [4, 32]
     @testset "random general" begin
         for n in ens

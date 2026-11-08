@@ -79,6 +79,12 @@ end
     rtulp = sqrt(ulp)
     rtulpi = one(real(T)) / rtulp
 
+    @testset "empty" begin
+        A = zeros(T, 0, 0)
+        B = zeros(T, 0, 0)
+        emptytest(A, B)
+    end
+
     # sizes of matrices to test
     ens = [4, 32]
 
