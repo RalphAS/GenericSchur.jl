@@ -543,7 +543,7 @@ function _gleigvecs!(
                         t1 = 1 / vmax
                         rmul!(view(v, ki:n), t1)
                         vmax = one_t
-                        vcrit = bignum
+                        # vcrit = bignum # dead assignment in LAPACK
                     end
                     vt1[1] = v[j] - dot(view(T, (ki + 1):(j - 1), j), view(v, (ki + 1):(j - 1)))
                     vscale, x, _ = _xsolve(
@@ -563,13 +563,13 @@ function _gleigvecs!(
                         t1 = one_t / vmax
                         rmul!(view(v, ki:n), t1)
                         vmax = one_t
-                        vcrit = bignum
+                        # vcrit = bignum # dead assignment in LAPACK
                     end
                     vt2 .= (
                         v[j:(j + 1)]
                             - view(T, (ki + 1):(j - 1), j:(j + 1))' * view(v, (ki + 1):(j - 1))
                     )
-                    vscale, x, t1 = _xsolve(
+                    vscale, x, _ = _xsolve(
                         one_t, view(T, j:(j + 1), j:(j + 1))',
                         [one_t, one_t], wr + 0im, vt2, smin
                     )
@@ -634,10 +634,10 @@ function _gleigvecs!(
                         t1 = one_t / vmax
                         rmul!(view(v, ki:n), t1)
                         vmax = one_t
-                        vcrit = bignum
+                        # vcrit = bignum # dead assignment in LAPACK
                     end
                     vt1[1] = v[j] - dot(view(T, (ki + 2):(j - 1), j), view(v, (ki + 2):(j - 1)))
-                    vscale, x, t1 = _xsolve(
+                    vscale, x, _ = _xsolve(
                         one_t, view(T, j:j, j:j), [one_t],
                         wr - im * wi, vt1, smin
                     )
@@ -655,13 +655,13 @@ function _gleigvecs!(
                         t1 = one_t / vmax
                         rmul!(view(v, ki:n), t1)
                         vmax = one_t
-                        vcrit = bignum
+                        # vcrit = bignum # dead assignment in LAPACK
                     end
                     vt2 .= (
                         v[j:(j + 1)]
                             - view(T, (ki + 2):(j - 1), j:(j + 1))' * view(v, (ki + 2):(j - 1))
                     )
-                    vscale, x, t1 = _xsolve(
+                    vscale, x, _ = _xsolve(
                         one_t, view(T, j:(j + 1), j:(j + 1))',
                         [one_t, one_t], wr - im * wi, vt2, smin
                     )
@@ -813,7 +813,7 @@ function _geigvecs(
             end
             aca = abs(acoeff)
             acb = abs1(bcoeff)
-            xmax = one(RT)
+            # xmax = one(RT) # dead assignment in LAPACK
             v .= zero(T)
             dmin = max(ulp * aca * anorm, ulp * acb * bnorm, safmin)
 
